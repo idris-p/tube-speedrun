@@ -1,3 +1,4 @@
+import { inject } from "@vercel/analytics";
 import "./style.css";
 import { createConnectionId, networkData } from "./data/network";
 import { validateNetworkData } from "./data/validation";
@@ -18,6 +19,8 @@ import { GRID_CELL_SIZE } from "./rendering/grid";
 import { STATION_WIPE_COMPONENT_RADIUS } from "./rendering/stationRenderer";
 import { Hud } from "./ui/hud";
 import type { Point } from "./data/types";
+
+inject();
 
 const REJECTED_MOVE_FLASH_MS = 180;
 const COUNTDOWN_STEP_MS = 700;
