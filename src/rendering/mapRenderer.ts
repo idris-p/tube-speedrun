@@ -137,7 +137,7 @@ export class MapRenderer {
       this.renderedSeed = state.seed;
       this.completedCameraCenter = null;
     }
-    this.svg.classList.remove("tube-map-menu-preview");
+    this.svg.classList.remove("tube-map-menu-preview", "tube-map-explorer");
     if (wasMenuPreview) {
       this.menuPreviewOrbitOffsetMs = 0;
     }
@@ -279,7 +279,7 @@ export class MapRenderer {
   renderIdle(): void {
     const wasMenuPreview = this.svg.classList.contains("tube-map-menu-preview");
     this.svg.classList.remove("tube-map-running");
-    this.svg.classList.remove("tube-map-completed", "tube-map-panning", "tube-map-menu-preview");
+    this.svg.classList.remove("tube-map-completed", "tube-map-panning", "tube-map-menu-preview", "tube-map-explorer");
     if (wasMenuPreview) {
       this.menuPreviewOrbitOffsetMs = 0;
     }
@@ -305,7 +305,7 @@ export class MapRenderer {
     if (!wasMenuPreview) {
       this.menuPreviewOrbitOffsetMs = Math.random() * orbitDurationMs;
     }
-    this.svg.classList.remove("tube-map-running", "tube-map-completed", "tube-map-panning");
+    this.svg.classList.remove("tube-map-running", "tube-map-completed", "tube-map-panning", "tube-map-explorer");
     this.svg.classList.add("tube-map-menu-preview");
     this.completedCameraCenter = null;
     this.renderedSeed = null;
@@ -369,6 +369,90 @@ export class MapRenderer {
 
     this.svg.classList.remove("tube-map-running", "tube-map-completed", "tube-map-panning");
     this.svg.classList.add("tube-map-menu-preview");
+  }
+
+  resetExplorerView(): void {
+    this.zoom = MIN_ZOOM;
+    this.completedCameraCenter = this.getMenuPreviewBaseCenter();
+  }
+
+  focusExplorerStation(stationId: string): void {
+    const station = getStation(this.network, stationId);
+    const markerGroups = this.corridorLayout.getStationMarkerGroups(stationId);
+    this.zoom = 1;
+    this.completedCameraCenter = markerGroups.length === 0
+      ? gridPointToSvgPoint(station)
+      : {
+          x: markerGroups.reduce((sum, group) => sum + group.point.x, 0) / markerGroups.length,
+          y: markerGroups.reduce((sum, group) => sum + group.point.y, 0) / markerGroups.length,
+        };
+  }
+
+  renderExplorer(): void {
+    const viewBoxSize = this.getViewBoxSize();
+    const cameraCenter = clampViewCenter(
+      this.completedCameraCenter ?? this.getMenuPreviewBaseCenter(),
+      viewBoxSize,
+      this.mapBounds,
+      MAP_PAN_PADDING,
+    );
+    this.completedCameraCenter = cameraCenter;
+    const viewBox = {
+      x: cameraCenter.x - viewBoxSize.width / 2,
+      y: cameraCenter.y - viewBoxSize.height / 2,
+      width: viewBoxSize.width,
+      height: viewBoxSize.height,
+    };
+    this.svg.setAttribute("viewBox", `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`);
+    this.svg.classList.remove("tube-map-running", "tube-map-menu-preview");
+    this.svg.classList.add("tube-map-completed", "tube-map-explorer");
+    this.svg.replaceChildren();
+
+    this.renderGrid(viewBox);
+    renderRiverThames(this.svg, viewBox);
+
+    const allConnectionIds = new Set(this.network.connections.map((connection) => connection.id));
+    const visibleConnectionPaths = this.network.connections.map((connection) => ({
+      connection,
+      points: this.corridorLayout.getConnectionRenderPoints(connection, allConnectionIds),
+    }));
+    const revealedLayer = document.createElementNS(SVG_NS, "g");
+    revealedLayer.setAttribute("class", "revealed-lines");
+    this.svg.append(revealedLayer);
+    for (const group of groupConnectionsByRenderedPath(visibleConnectionPaths)) {
+      group.forEach(({ connection, points }, index) => {
+        renderRevealedLine(
+          revealedLayer,
+          connection,
+          this.network,
+          getCenteredOffset(index, group.length, PARALLEL_LINE_SPACING),
+          points,
+        );
+      });
+    }
+
+    const stationLayer = document.createElementNS(SVG_NS, "g");
+    stationLayer.setAttribute("class", "stations");
+    this.svg.append(stationLayer);
+    for (const station of this.network.stations) {
+      if (station.lines.length === 0) {
+        continue;
+      }
+      renderStationMarker(
+        stationLayer,
+        station,
+        this.network,
+        station.lines[0],
+        false,
+        this.corridorLayout.getStationMarkerGroups(station.id),
+        undefined,
+        {
+          revealedLabel: {
+            placement: getStationLabelPlacement(station),
+          },
+        },
+      );
+    }
   }
 
   zoomIn(): void {
@@ -519,6 +603,16 @@ export class MapRenderer {
   }
 
   private getMenuPreviewCameraCenter(now: number): Point {
+    const baseCenter = this.getMenuPreviewBaseCenter();
+    const orbitDurationMs = MENU_PREVIEW_SECONDS_PER_ORBIT * 1_000;
+    const radians = ((now % orbitDurationMs) / orbitDurationMs) * Math.PI * 2;
+    return {
+      x: baseCenter.x + Math.cos(radians) * MENU_PREVIEW_ORBIT_RADIUS_X,
+      y: baseCenter.y + Math.sin(radians) * MENU_PREVIEW_ORBIT_RADIUS_Y,
+    };
+  }
+
+  private getMenuPreviewBaseCenter(): Point {
     const centralPoints = MENU_PREVIEW_FOCUS_STATIONS.flatMap((stationId) => {
       const station = this.network.stations.find((candidate) => candidate.id === stationId);
       return station ? [gridPointToSvgPoint(station)] : [];
@@ -529,12 +623,7 @@ export class MapRenderer {
           x: centralPoints.reduce((sum, point) => sum + point.x, 0) / centralPoints.length,
           y: centralPoints.reduce((sum, point) => sum + point.y, 0) / centralPoints.length,
         };
-    const orbitDurationMs = MENU_PREVIEW_SECONDS_PER_ORBIT * 1_000;
-    const radians = ((now % orbitDurationMs) / orbitDurationMs) * Math.PI * 2;
-    return {
-      x: baseCenter.x + Math.cos(radians) * MENU_PREVIEW_ORBIT_RADIUS_X,
-      y: baseCenter.y + Math.sin(radians) * MENU_PREVIEW_ORBIT_RADIUS_Y,
-    };
+    return baseCenter;
   }
 
   private getBaseViewBoxSize(): { width: number; height: number } {

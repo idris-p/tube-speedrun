@@ -9,6 +9,8 @@ import { ROUND_COUNT, type RunResults, type RunState } from "../game/RunState";
 export type HudCallbacks = {
   onStartRandomSeed: () => void;
   onStartSeed: (seed: string) => void;
+  onOpenMap: () => void;
+  onFocusMapStation: (stationId: string) => void;
   onReturnToMenu: () => void;
   onPlayAgain: () => void;
   onAdvanceRound: () => void;
@@ -18,6 +20,7 @@ export type HudCallbacks = {
 
 type MenuMode = "home" | "seed-choice" | "seed-entry";
 type SocialLinkId = "github" | "reddit" | "x";
+type MapSearchEntry = { label: string; stationId: string };
 
 const SOCIAL_LINKS: { id: SocialLinkId; label: string; href: string }[] = [
   { id: "github", label: "GitHub", href: "https://github.com/idris-p" },
@@ -70,6 +73,12 @@ export class Hud {
   private readonly menuBackButton: HTMLButtonElement;
   private readonly menuActions: HTMLDivElement;
   private readonly menuSeedInput: HTMLInputElement;
+  private readonly mapViewerControls: HTMLDivElement;
+  private readonly mapSearchInput: HTMLInputElement;
+  private readonly mapSearchResults: HTMLDivElement;
+  private readonly mapSearchEntries: MapSearchEntry[];
+  private mapSearchVisibleEntries: MapSearchEntry[] = [];
+  private mapSearchActiveIndex = -1;
   private readonly network: NetworkData;
   private readonly callbacks: HudCallbacks;
   private menuMode: MenuMode = "home";
@@ -144,6 +153,93 @@ export class Hud {
     menuContent.append(menuTitle, this.menuActions);
     this.menuOverlay.append(this.menuBackButton, menuContent, socialLinks);
     this.setMenuMode("home");
+
+    this.mapViewerControls = document.createElement("div");
+    this.mapViewerControls.className = "map-viewer-controls";
+    this.mapViewerControls.hidden = true;
+    const mapViewerBack = document.createElement("button");
+    mapViewerBack.type = "button";
+    mapViewerBack.className = "map-viewer-back";
+    mapViewerBack.textContent = "\u2190 Menu";
+    mapViewerBack.addEventListener("click", callbacks.onReturnToMenu);
+    const mapSearchForm = document.createElement("form");
+    mapSearchForm.className = "map-search-form";
+    this.mapSearchInput = document.createElement("input");
+    this.mapSearchInput.type = "search";
+    this.mapSearchInput.placeholder = "Search for a station";
+    this.mapSearchInput.ariaLabel = "Search for a station";
+    this.mapSearchInput.autocomplete = "off";
+    this.mapSearchInput.spellcheck = false;
+    this.mapSearchInput.setAttribute("role", "combobox");
+    this.mapSearchInput.setAttribute("aria-autocomplete", "list");
+    this.mapSearchInput.setAttribute("aria-controls", "map-station-results");
+    this.mapSearchInput.setAttribute("aria-expanded", "false");
+    this.mapSearchEntries = createMapSearchEntries(network);
+    this.mapSearchResults = document.createElement("div");
+    this.mapSearchResults.id = "map-station-results";
+    this.mapSearchResults.className = "map-search-results";
+    this.mapSearchResults.setAttribute("role", "listbox");
+    this.mapSearchResults.hidden = true;
+    const mapSearchButton = document.createElement("button");
+    mapSearchButton.type = "submit";
+    mapSearchButton.className = "map-search-submit";
+    mapSearchButton.textContent = "Find";
+    mapSearchForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const stationId = findMapSearchStationId(this.mapSearchEntries, this.mapSearchInput.value);
+      if (!stationId) {
+        this.mapSearchInput.setCustomValidity("Choose a station from the list.");
+        this.mapSearchInput.reportValidity();
+        return;
+      }
+      this.mapSearchInput.setCustomValidity("");
+      callbacks.onFocusMapStation(stationId);
+      this.hideMapSearchResults();
+      this.mapSearchInput.blur();
+    });
+    this.mapSearchInput.addEventListener("focus", () => this.renderMapSearchResults());
+    this.mapSearchInput.addEventListener("input", () => {
+      this.mapSearchInput.setCustomValidity("");
+      this.renderMapSearchResults();
+    });
+    this.mapSearchInput.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        this.hideMapSearchResults();
+        return;
+      }
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        if (this.mapSearchResults.hidden) {
+          this.renderMapSearchResults();
+        }
+        if (this.mapSearchVisibleEntries.length === 0) {
+          return;
+        }
+        const direction = event.key === "ArrowDown" ? 1 : -1;
+        const nextIndex = this.mapSearchActiveIndex < 0
+          ? direction > 0 ? 0 : this.mapSearchVisibleEntries.length - 1
+          : (this.mapSearchActiveIndex + direction + this.mapSearchVisibleEntries.length) %
+            this.mapSearchVisibleEntries.length;
+        this.setMapSearchActiveIndex(nextIndex);
+        return;
+      }
+      if (event.key === "Enter" && !this.mapSearchResults.hidden && this.mapSearchActiveIndex >= 0) {
+        event.preventDefault();
+        const entry = this.mapSearchVisibleEntries[this.mapSearchActiveIndex];
+        if (entry) {
+          this.selectMapSearchEntry(entry);
+        }
+      }
+    });
+    mapSearchForm.addEventListener("focusout", () => {
+      window.setTimeout(() => {
+        if (!mapSearchForm.contains(document.activeElement)) {
+          this.hideMapSearchResults();
+        }
+      }, 0);
+    });
+    mapSearchForm.append(this.mapSearchInput, mapSearchButton, this.mapSearchResults);
+    this.mapViewerControls.append(mapViewerBack, mapSearchForm);
 
     this.countdownOverlay = document.createElement("div");
     this.countdownOverlay.className = "countdown-overlay";
@@ -330,6 +426,7 @@ export class Hud {
       this.lineIndicator,
       this.temporaryBanner,
       this.menuOverlay,
+      this.mapViewerControls,
       this.countdownOverlay,
       this.completionOverlay,
       this.exitConfirmOverlay,
@@ -340,6 +437,11 @@ export class Hud {
   }
 
   showMenu(): void {
+    this.shell.classList.remove("map-viewer-active");
+    this.mapViewerControls.hidden = true;
+    this.mapSearchInput.value = "";
+    this.hideMapSearchResults();
+    this.removeZoomControls();
     this.completionDismissed = false;
     this.exitConfirmOverlay.hidden = true;
     this.resultsOverlay.hidden = true;
@@ -348,6 +450,8 @@ export class Hud {
   }
 
   showSeedChoiceMenu(): void {
+    this.shell.classList.remove("map-viewer-active");
+    this.mapViewerControls.hidden = true;
     this.completionDismissed = false;
     this.exitConfirmOverlay.hidden = true;
     this.resultsOverlay.hidden = true;
@@ -356,6 +460,8 @@ export class Hud {
   }
 
   showResults(results: RunResults): void {
+    this.shell.classList.remove("map-viewer-active");
+    this.mapViewerControls.hidden = true;
     this.shell.classList.remove("countdown-active");
     this.shell.classList.add("menu-active");
     this.statsPanel.hidden = true;
@@ -406,6 +512,8 @@ export class Hud {
   }
 
   showCountdown(value: number): void {
+    this.shell.classList.remove("map-viewer-active");
+    this.mapViewerControls.hidden = true;
     this.shell.classList.remove("menu-active");
     this.shell.classList.add("countdown-active");
     this.statsPanel.hidden = true;
@@ -424,6 +532,8 @@ export class Hud {
   }
 
   update(state: GameState | null, now: number, runState: RunState | null = null): void {
+    this.shell.classList.remove("map-viewer-active");
+    this.mapViewerControls.hidden = true;
     if (!state) {
       this.shell.classList.remove("countdown-active");
       this.shell.classList.add("menu-active");
@@ -489,6 +599,77 @@ export class Hud {
     }
   }
 
+  showMapViewer(): void {
+    this.shell.classList.remove("menu-active", "countdown-active");
+    this.shell.classList.add("map-viewer-active");
+    this.statsPanel.hidden = true;
+    this.timerPanel.hidden = true;
+    this.lineIndicator.hidden = true;
+    this.temporaryBanner.hidden = true;
+    this.menuOverlay.hidden = true;
+    this.completionOverlay.hidden = true;
+    this.gameplayExitButton.hidden = true;
+    this.countdownOverlay.hidden = true;
+    this.exitConfirmOverlay.hidden = true;
+    this.dismissedRoundActionButton.hidden = true;
+    this.resultsOverlay.hidden = true;
+    this.mapViewerControls.hidden = false;
+    this.ensureZoomControls();
+  }
+
+  private renderMapSearchResults(): void {
+    this.mapSearchVisibleEntries = filterMapSearchEntries(this.mapSearchEntries, this.mapSearchInput.value);
+    this.mapSearchActiveIndex = -1;
+    this.mapSearchResults.replaceChildren(...this.mapSearchVisibleEntries.map((entry, index) => {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.id = `map-station-result-${entry.stationId}`;
+      option.className = "map-search-result";
+      option.setAttribute("role", "option");
+      option.setAttribute("aria-selected", "false");
+      option.tabIndex = -1;
+      option.textContent = entry.label;
+      option.addEventListener("pointerdown", (event) => event.preventDefault());
+      option.addEventListener("pointerenter", () => this.setMapSearchActiveIndex(index));
+      option.addEventListener("click", () => this.selectMapSearchEntry(entry));
+      return option;
+    }));
+    this.mapSearchResults.hidden = this.mapSearchVisibleEntries.length === 0;
+    this.mapSearchInput.setAttribute("aria-expanded", String(!this.mapSearchResults.hidden));
+  }
+
+  private setMapSearchActiveIndex(index: number): void {
+    if (this.mapSearchVisibleEntries.length === 0) {
+      return;
+    }
+    this.mapSearchActiveIndex = Math.max(0, Math.min(index, this.mapSearchVisibleEntries.length - 1));
+    const options = [...this.mapSearchResults.querySelectorAll<HTMLButtonElement>(".map-search-result")];
+    options.forEach((option, optionIndex) => {
+      const active = optionIndex === this.mapSearchActiveIndex;
+      option.classList.toggle("map-search-result-active", active);
+      option.setAttribute("aria-selected", String(active));
+      if (active) {
+        this.mapSearchInput.setAttribute("aria-activedescendant", option.id);
+        option.scrollIntoView({ block: "nearest" });
+      }
+    });
+  }
+
+  private selectMapSearchEntry(entry: MapSearchEntry): void {
+    this.mapSearchInput.value = entry.label;
+    this.mapSearchInput.setCustomValidity("");
+    this.callbacks.onFocusMapStation(entry.stationId);
+    this.hideMapSearchResults();
+    this.mapSearchInput.blur();
+  }
+
+  private hideMapSearchResults(): void {
+    this.mapSearchResults.hidden = true;
+    this.mapSearchActiveIndex = -1;
+    this.mapSearchInput.setAttribute("aria-expanded", "false");
+    this.mapSearchInput.removeAttribute("aria-activedescendant");
+  }
+
   private setMenuMode(mode: MenuMode): void {
     this.menuMode = mode;
     this.menuOverlay.dataset.menuMode = mode;
@@ -496,7 +677,10 @@ export class Hud {
     this.menuActions.replaceChildren();
 
     if (mode === "home") {
-      this.menuActions.append(menuButton("Play", "primary", () => this.setMenuMode("seed-choice")));
+      this.menuActions.append(
+        menuButton("Play", "primary", () => this.setMenuMode("seed-choice")),
+        menuButton("Map", "secondary", this.callbacks.onOpenMap),
+      );
       return;
     }
 
@@ -581,6 +765,68 @@ function menuButton(
     button.addEventListener("click", callback);
   }
   return button;
+}
+
+export function createMapSearchEntries(network: NetworkData): MapSearchEntry[] {
+  const nameCounts = new Map<string, number>();
+  for (const station of network.stations) {
+    const key = normalizeStationSearch(station.name);
+    nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
+  }
+
+  return network.stations
+    .map((station) => {
+      const duplicateName = (nameCounts.get(normalizeStationSearch(station.name)) ?? 0) > 1;
+      const lineNames = station.lines
+        .filter((lineId) => lineId !== "walk")
+        .map((lineId) => LINE_BY_ID[lineId].name)
+        .join(", ");
+      return {
+        label: duplicateName && lineNames !== "" ? `${station.name} \u2014 ${lineNames}` : station.name,
+        stationId: station.id,
+      };
+    })
+    .sort((left, right) => left.label.localeCompare(right.label, "en-GB"));
+}
+
+export function findMapSearchStationId(entries: readonly MapSearchEntry[], query: string): string | null {
+  const normalizedQuery = normalizeStationSearch(query);
+  if (normalizedQuery === "") {
+    return null;
+  }
+
+  const exactMatches = entries.filter((entry) => normalizeStationSearch(entry.label) === normalizedQuery);
+  if (exactMatches.length === 1) {
+    return exactMatches[0].stationId;
+  }
+
+  const nameMatches = entries.filter((entry) =>
+    normalizeStationSearch(entry.label.split("\u2014", 1)[0]) === normalizedQuery
+  );
+  if (nameMatches.length === 1) {
+    return nameMatches[0].stationId;
+  }
+
+  const partialMatches = entries.filter((entry) => normalizeStationSearch(entry.label).includes(normalizedQuery));
+  return partialMatches.length === 1 ? partialMatches[0].stationId : null;
+}
+
+export function filterMapSearchEntries(
+  entries: readonly MapSearchEntry[],
+  query: string,
+): MapSearchEntry[] {
+  const normalizedQuery = normalizeStationSearch(query);
+  if (normalizedQuery === "") {
+    return [...entries];
+  }
+  return entries.filter((entry) => normalizeStationSearch(entry.label).includes(normalizedQuery));
+}
+
+function normalizeStationSearch(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase("en-GB")
+    .replace(/\s+/g, " ");
 }
 
 function getPreviousMenuMode(mode: MenuMode): MenuMode {

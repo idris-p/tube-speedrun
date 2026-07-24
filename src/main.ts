@@ -54,6 +54,7 @@ function startGame(): void {
 let state: GameState | null = null;
 let runState: RunState | null = null;
 let results: RunResults | null = null;
+let mapViewerActive = false;
 let countdown: { run: RunState; startedAt: number } | null = null;
 let pointerPoint: Point | null = null;
 let mouseIntent = createMouseIntentState();
@@ -85,11 +86,30 @@ let cameraPanAnimation: {
 const hud = new Hud(appRoot, networkData, {
   onStartRandomSeed: () => startRun(generateSeed(), "random"),
   onStartSeed: (seed) => startRun(seed, "set"),
+  onOpenMap: () => {
+    state = null;
+    runState = null;
+    results = null;
+    countdown = null;
+    mapViewerActive = true;
+    resetRunTransientState();
+    renderer.resetExplorerView();
+    hud.showMapViewer();
+    render();
+  },
+  onFocusMapStation: (stationId) => {
+    if (!mapViewerActive) {
+      return;
+    }
+    renderer.focusExplorerStation(stationId);
+    render();
+  },
   onReturnToMenu: () => {
     state = null;
     runState = null;
     results = null;
     countdown = null;
+    mapViewerActive = false;
     resetRunTransientState();
     hud.showMenu();
     render();
@@ -99,20 +119,21 @@ const hud = new Hud(appRoot, networkData, {
     runState = null;
     results = null;
     countdown = null;
+    mapViewerActive = false;
     resetRunTransientState();
     hud.showSeedChoiceMenu();
     render();
   },
   onAdvanceRound: () => advanceFromCompletedRound(),
   onZoomIn: () => {
-    if (!state?.completed) {
+    if (!state?.completed && !mapViewerActive) {
       return;
     }
     renderer.zoomIn();
     render();
   },
   onZoomOut: () => {
-    if (!state?.completed) {
+    if (!state?.completed && !mapViewerActive) {
       return;
     }
     renderer.zoomOut();
@@ -123,6 +144,7 @@ const hud = new Hud(appRoot, networkData, {
 const renderer = new MapRenderer(hud.mapHost, networkData);
 
 function startRun(seed: string, seedSource: RunState["seedSource"]): void {
+  mapViewerActive = false;
   runState = {
     seed,
     seedSource,
@@ -199,7 +221,9 @@ function resetRunTransientState(): void {
 }
 
 function render(now = performance.now()): void {
-  if (results) {
+  if (mapViewerActive) {
+    renderer.renderExplorer();
+  } else if (results) {
     renderer.renderMenuPreview(now);
     hud.showResults(results);
   } else if (state && runState) {
@@ -223,7 +247,9 @@ function render(now = performance.now()): void {
 
 function tick(): void {
   const now = performance.now();
-  if (countdown) {
+  if (mapViewerActive) {
+    // Explorer rendering is event-driven while idle.
+  } else if (countdown) {
     if (now - countdown.startedAt >= COUNTDOWN_STEP_MS * COUNTDOWN_START_VALUE) {
       completeCountdown(countdown.run, now);
     } else {
@@ -373,14 +399,18 @@ bindKeyboardControls((direction) => {
 });
 
 renderer.svg.addEventListener("pointermove", (event) => {
-  if (!state) {
-    return;
-  }
-
   if (panPointerId === event.pointerId && lastPanPoint) {
     renderer.panByClientDelta(event.clientX - lastPanPoint.x, event.clientY - lastPanPoint.y);
     lastPanPoint = { x: event.clientX, y: event.clientY };
     render();
+    return;
+  }
+
+  if (mapViewerActive) {
+    return;
+  }
+
+  if (!state) {
     return;
   }
 
@@ -471,7 +501,7 @@ function tryHeldPointerMove(now: number, forceAttempt = false): void {
 }
 
 renderer.svg.addEventListener("wheel", (event) => {
-  if (!state?.completed) {
+  if (!state?.completed && !mapViewerActive) {
     return;
   }
 
@@ -498,7 +528,7 @@ renderer.svg.addEventListener("pointerdown", (event) => {
     return;
   }
 
-  if (state?.completed) {
+  if (state?.completed || mapViewerActive) {
     panPointerId = event.pointerId;
     lastPanPoint = { x: event.clientX, y: event.clientY };
     renderer.svg.setPointerCapture(event.pointerId);
