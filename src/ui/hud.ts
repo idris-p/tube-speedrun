@@ -531,7 +531,12 @@ export class Hud {
     this.removeZoomControls();
   }
 
-  update(state: GameState | null, now: number, runState: RunState | null = null): void {
+  update(
+    state: GameState | null,
+    now: number,
+    runState: RunState | null = null,
+    completionReady = true,
+  ): void {
     this.shell.classList.remove("map-viewer-active");
     this.mapViewerControls.hidden = true;
     if (!state) {
@@ -576,14 +581,15 @@ export class Hud {
 
     this.renderLineIndicator(state);
 
-    if (!state.completed) {
+    if (!state.completed || !completionReady) {
       this.completionDismissed = false;
       this.dismissedRoundActionButton.hidden = true;
       this.removeZoomControls();
     }
-    this.completionOverlay.hidden = !state.completed || this.completionDismissed;
-    this.dismissedRoundActionButton.hidden = !state.completed || !this.completionDismissed;
-    if (state.completed && runState) {
+    const showCompletion = state.completed && completionReady;
+    this.completionOverlay.hidden = !showCompletion || this.completionDismissed;
+    this.dismissedRoundActionButton.hidden = !showCompletion || !this.completionDismissed;
+    if (showCompletion && runState) {
       const actionLabel = runState.currentRoundIndex >= ROUND_COUNT - 1 ? "Finish" : "Next Round";
       this.completionTitle.textContent = `Round ${runState.currentRoundIndex + 1} Complete`;
       this.completionTime.classList.remove("time-value");

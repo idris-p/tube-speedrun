@@ -131,6 +131,8 @@ export class MapRenderer {
     lineReveal: LineRevealAnimation | null = null,
     stationWipe: StationWipeAnimation | null = null,
     cameraPan: CameraPanAnimation | null = null,
+    completionInteractionLocked = false,
+    targetArrivalCelebration = false,
   ): void {
     const wasMenuPreview = this.svg.classList.contains("tube-map-menu-preview");
     if (this.renderedSeed !== state.seed) {
@@ -142,7 +144,8 @@ export class MapRenderer {
       this.menuPreviewOrbitOffsetMs = 0;
     }
     this.svg.classList.toggle("tube-map-running", !state.completed);
-    this.svg.classList.toggle("tube-map-completed", state.completed);
+    this.svg.classList.toggle("tube-map-completed", state.completed && !completionInteractionLocked);
+    this.svg.classList.toggle("tube-map-target-arrival", targetArrivalCelebration);
     const hiddenCurrentStationId = lineReveal?.hiddenCurrentStationId ?? null;
     const isCurrentStationWiping = stationWipe?.stationId === hiddenCurrentStationId;
     const hideCurrentStation = hiddenCurrentStationId === state.currentStationId && !isCurrentStationWiping;
@@ -279,7 +282,13 @@ export class MapRenderer {
   renderIdle(): void {
     const wasMenuPreview = this.svg.classList.contains("tube-map-menu-preview");
     this.svg.classList.remove("tube-map-running");
-    this.svg.classList.remove("tube-map-completed", "tube-map-panning", "tube-map-menu-preview", "tube-map-explorer");
+    this.svg.classList.remove(
+      "tube-map-completed",
+      "tube-map-panning",
+      "tube-map-menu-preview",
+      "tube-map-explorer",
+      "tube-map-target-arrival",
+    );
     if (wasMenuPreview) {
       this.menuPreviewOrbitOffsetMs = 0;
     }
@@ -305,7 +314,13 @@ export class MapRenderer {
     if (!wasMenuPreview) {
       this.menuPreviewOrbitOffsetMs = Math.random() * orbitDurationMs;
     }
-    this.svg.classList.remove("tube-map-running", "tube-map-completed", "tube-map-panning", "tube-map-explorer");
+    this.svg.classList.remove(
+      "tube-map-running",
+      "tube-map-completed",
+      "tube-map-panning",
+      "tube-map-explorer",
+      "tube-map-target-arrival",
+    );
     this.svg.classList.add("tube-map-menu-preview");
     this.completedCameraCenter = null;
     this.renderedSeed = null;
@@ -367,7 +382,12 @@ export class MapRenderer {
       );
     }
 
-    this.svg.classList.remove("tube-map-running", "tube-map-completed", "tube-map-panning");
+    this.svg.classList.remove(
+      "tube-map-running",
+      "tube-map-completed",
+      "tube-map-panning",
+      "tube-map-target-arrival",
+    );
     this.svg.classList.add("tube-map-menu-preview");
   }
 
@@ -404,7 +424,7 @@ export class MapRenderer {
       height: viewBoxSize.height,
     };
     this.svg.setAttribute("viewBox", `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`);
-    this.svg.classList.remove("tube-map-running", "tube-map-menu-preview");
+    this.svg.classList.remove("tube-map-running", "tube-map-menu-preview", "tube-map-target-arrival");
     this.svg.classList.add("tube-map-completed", "tube-map-explorer");
     this.svg.replaceChildren();
 

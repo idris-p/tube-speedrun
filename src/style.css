@@ -91,6 +91,25 @@ svg text {
   opacity: 1;
 }
 
+.tube-map-target-arrival .station-current .current-station-label {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: target-arrival-pulse 900ms ease-in-out 180ms both;
+}
+
+@keyframes target-arrival-pulse {
+  0%,
+  50%,
+  100% {
+    transform: scale(1);
+  }
+
+  25%,
+  75% {
+    transform: scale(1.18);
+  }
+}
+
 .direction-stub {
   stroke-linecap: butt;
   opacity: 1;

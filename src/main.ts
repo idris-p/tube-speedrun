@@ -3,6 +3,11 @@ import "./style.css";
 import { createConnectionId, networkData } from "./data/network";
 import { validateNetworkData } from "./data/validation";
 import { createGameStateForRound, getElapsedMilliseconds, type GameState } from "./game/GameState";
+import {
+  advanceCompletionCelebration,
+  createCompletionCelebration,
+  type CompletionCelebration,
+} from "./game/completionCelebration";
 import { generateRoundConfigs, generateSeed } from "./game/seed";
 import { ROUND_COUNT, type RoundStats, type RunResults, type RunState } from "./game/RunState";
 import { cycleSelectedLine } from "./game/lineSelection";
@@ -55,6 +60,7 @@ let state: GameState | null = null;
 let runState: RunState | null = null;
 let results: RunResults | null = null;
 let mapViewerActive = false;
+let completionCelebration: CompletionCelebration | null = null;
 let countdown: { run: RunState; startedAt: number } | null = null;
 let pointerPoint: Point | null = null;
 let mouseIntent = createMouseIntentState();
@@ -126,14 +132,14 @@ const hud = new Hud(appRoot, networkData, {
   },
   onAdvanceRound: () => advanceFromCompletedRound(),
   onZoomIn: () => {
-    if (!state?.completed && !mapViewerActive) {
+    if (!canPanAndZoom()) {
       return;
     }
     renderer.zoomIn();
     render();
   },
   onZoomOut: () => {
-    if (!state?.completed && !mapViewerActive) {
+    if (!canPanAndZoom()) {
       return;
     }
     renderer.zoomOut();
@@ -214,6 +220,7 @@ function resetRunTransientState(): void {
   lineRevealAnimation = null;
   stationWipeAnimation = null;
   cameraPanAnimation = null;
+  completionCelebration = null;
   panPointerId = null;
   lastPanPoint = null;
   renderer.svg.classList.remove("tube-map-panning");
@@ -234,8 +241,10 @@ function render(now = performance.now()): void {
       getActiveLineRevealAnimation(now),
       getActiveStationWipeAnimation(now),
       getActiveCameraPanAnimation(now),
+      completionCelebration !== null,
+      completionCelebration !== null && completionCelebration.startedAt !== null,
     );
-    hud.update(state, now, runState);
+    hud.update(state, now, runState, completionCelebration === null);
   } else if (countdown) {
     renderer.renderMenuPreview(now);
     hud.showCountdown(getCountdownValue(countdown, now));
@@ -281,10 +290,21 @@ function tick(): void {
     if (cameraPanAnimation && getCameraPanAnimationProgress(now) >= 1) {
       cameraPanAnimation = null;
     }
-    if (hadLineRevealAnimation || hadStationWipeAnimation || hadCameraPanAnimation) {
+    const nextCompletionCelebration = advanceCompletionCelebration(
+      completionCelebration,
+      lineRevealAnimation !== null || stationWipeAnimation !== null,
+      now,
+    );
+    completionCelebration = nextCompletionCelebration.celebration;
+    if (
+      hadLineRevealAnimation ||
+      hadStationWipeAnimation ||
+      hadCameraPanAnimation ||
+      nextCompletionCelebration.changed
+    ) {
       render(now);
     } else {
-      hud.update(state, now, runState);
+      hud.update(state, now, runState, completionCelebration === null);
     }
   } else if (results || !state) {
     renderer.renderMenuPreview(now);
@@ -468,6 +488,7 @@ function attemptMoveFromCurrentIntent(now: number): boolean {
   }
 
   if (state.completed) {
+    completionCelebration = createCompletionCelebration();
     pointerPoint = null;
     mouseIntent = clearMouseIntentPosition(mouseIntent);
   }
@@ -501,7 +522,7 @@ function tryHeldPointerMove(now: number, forceAttempt = false): void {
 }
 
 renderer.svg.addEventListener("wheel", (event) => {
-  if (!state?.completed && !mapViewerActive) {
+  if (!canPanAndZoom()) {
     return;
   }
 
@@ -528,7 +549,7 @@ renderer.svg.addEventListener("pointerdown", (event) => {
     return;
   }
 
-  if (state?.completed || mapViewerActive) {
+  if (canPanAndZoom()) {
     panPointerId = event.pointerId;
     lastPanPoint = { x: event.clientX, y: event.clientY };
     renderer.svg.setPointerCapture(event.pointerId);
@@ -536,6 +557,10 @@ renderer.svg.addEventListener("pointerdown", (event) => {
     event.preventDefault();
   }
 });
+
+function canPanAndZoom(): boolean {
+  return mapViewerActive || Boolean(state?.completed && completionCelebration === null);
+}
 
 function endPan(event: PointerEvent): void {
   if (panPointerId !== event.pointerId) {
