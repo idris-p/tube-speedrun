@@ -173,7 +173,7 @@ export class MapRenderer {
           revealCameraPoint ?? this.completedCameraCenter ?? cameraAnchor,
           viewBoxSize,
           this.mapBounds,
-          MAP_PAN_PADDING,
+          getMapPanPadding(viewBoxSize),
         )
       : cameraAnchor;
     if (state.completed) {
@@ -394,7 +394,7 @@ export class MapRenderer {
       this.completedCameraCenter ?? this.getMenuPreviewBaseCenter(),
       viewBoxSize,
       this.mapBounds,
-      MAP_PAN_PADDING,
+      getMapPanPadding(viewBoxSize),
     );
     this.completedCameraCenter = cameraCenter;
     const viewBox = {
@@ -485,7 +485,7 @@ export class MapRenderer {
       },
       viewBoxSize,
       this.mapBounds,
-      MAP_PAN_PADDING,
+      getMapPanPadding(viewBoxSize),
     );
   }
 
@@ -761,16 +761,26 @@ export class MapRenderer {
 }
 
 export type MapBounds = { minX: number; maxX: number; minY: number; maxY: number };
+export type MapPadding = number | { x: number; y: number };
+
+export function getMapPanPadding(viewBoxSize: { width: number; height: number }): Point {
+  return {
+    x: Math.max(MAP_PAN_PADDING, viewBoxSize.width / 2),
+    y: Math.max(MAP_PAN_PADDING, viewBoxSize.height / 2),
+  };
+}
 
 export function clampViewCenter(
   center: Point,
   viewBoxSize: { width: number; height: number },
   bounds: MapBounds,
-  padding = 0,
+  padding: MapPadding = 0,
 ): Point {
+  const horizontalPadding = typeof padding === "number" ? padding : padding.x;
+  const verticalPadding = typeof padding === "number" ? padding : padding.y;
   return {
-    x: clampAxis(center.x, viewBoxSize.width, bounds.minX - padding, bounds.maxX + padding),
-    y: clampAxis(center.y, viewBoxSize.height, bounds.minY - padding, bounds.maxY + padding),
+    x: clampAxis(center.x, viewBoxSize.width, bounds.minX - horizontalPadding, bounds.maxX + horizontalPadding),
+    y: clampAxis(center.y, viewBoxSize.height, bounds.minY - verticalPadding, bounds.maxY + verticalPadding),
   };
 }
 

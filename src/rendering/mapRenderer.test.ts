@@ -8,6 +8,7 @@ import {
   type DirectionStubLike,
   getDirectionStubStart,
   getDirectionStubUnit,
+  getMapPanPadding,
   getPointAlongPolyline,
   getSelectedStationMarkerPoint,
   getStationSpecificDirectionStubStart,
@@ -508,5 +509,17 @@ describe("completed map panning", () => {
     const bounds = { minX: 0, maxX: 100, minY: 20, maxY: 80 };
     expect(clampViewCenter({ x: 0, y: 0 }, { width: 500, height: 400 }, bounds, 20))
       .toEqual({ x: 50, y: 50 });
+  });
+
+  it("allows an edge station to be centred at the current viewport size", () => {
+    const bounds = { minX: 0, maxX: 1_000, minY: 0, maxY: 800 };
+    const viewBoxSize = { width: 400, height: 300 };
+    const padding = getMapPanPadding(viewBoxSize);
+
+    expect(padding).toEqual({ x: 200, y: 150 });
+    expect(clampViewCenter({ x: 1_000, y: 400 }, viewBoxSize, bounds, padding))
+      .toEqual({ x: 1_000, y: 400 });
+    expect(clampViewCenter({ x: 500, y: 0 }, viewBoxSize, bounds, padding))
+      .toEqual({ x: 500, y: 0 });
   });
 });
