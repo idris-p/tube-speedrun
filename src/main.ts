@@ -1,4 +1,5 @@
 import { inject } from "@vercel/analytics";
+import { injectSpeedInsights } from '@vercel/speed-insights';
 import "./style.css";
 import { createConnectionId, networkData } from "./data/network";
 import { validateNetworkData } from "./data/validation";
@@ -26,6 +27,7 @@ import { Hud } from "./ui/hud";
 import type { Point } from "./data/types";
 
 inject();
+injectSpeedInsights();
 
 const REJECTED_MOVE_FLASH_MS = 180;
 const COUNTDOWN_STEP_MS = 700;
