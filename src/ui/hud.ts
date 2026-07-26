@@ -2,9 +2,17 @@ import { LINE_BY_ID } from "../data/lines";
 import type { NetworkData } from "../data/types";
 import type { GameState } from "../game/GameState";
 import { getElapsedMilliseconds } from "../game/GameState";
+import { createJourneySummary, formatJourneyStationName } from "../game/journey";
 import { getLineCyclePreview } from "../game/lineSelection";
 import { getStation } from "../game/movement";
 import { ROUND_COUNT, type RunResults, type RunState } from "../game/RunState";
+import { GRID_CELL_SIZE } from "../rendering/grid";
+import { LINE_STROKE_WIDTH } from "../rendering/lineStyles";
+import {
+  INTERCHANGE_OUTLINE_WIDTH,
+  createBarMarker,
+  createInterchangeMarker,
+} from "../rendering/stationRenderer";
 
 export type HudCallbacks = {
   onStartRandomSeed: () => void;
@@ -27,6 +35,8 @@ const SOCIAL_LINKS: { id: SocialLinkId; label: string; href: string }[] = [
   { id: "reddit", label: "Reddit", href: "https://www.reddit.com/user/idris--p/" },
   { id: "x", label: "X", href: "https://x.com/idris__p" },
 ];
+const SVG_NS = "http://www.w3.org/2000/svg";
+const JOURNEY_MARKER_SIZE = 20;
 
 export class Hud {
   readonly mapHost: HTMLDivElement;
@@ -52,6 +62,8 @@ export class Hud {
   private readonly completionMoves: HTMLSpanElement;
   private readonly completionChanges: HTMLSpanElement;
   private readonly completionStats: HTMLDivElement;
+  private readonly completionJourney: HTMLElement;
+  private readonly completionJourneyDiagram: HTMLDivElement;
   private readonly completionCloseButton: HTMLButtonElement;
   private readonly completionQuitButton: HTMLButtonElement;
   private readonly dismissedRoundActionButton: HTMLButtonElement;
@@ -83,6 +95,7 @@ export class Hud {
   private readonly callbacks: HudCallbacks;
   private menuMode: MenuMode = "home";
   private completionDismissed = false;
+  private renderedCompletionJourneyLegs: GameState["journeyLegs"] | null = null;
 
   constructor(root: HTMLElement, network: NetworkData, callbacks: HudCallbacks) {
     this.network = network;
@@ -279,6 +292,14 @@ export class Hud {
       completionStat("Changes", this.completionChanges),
       completionStat("Moves", this.completionMoves),
     );
+    this.completionJourney = document.createElement("section");
+    this.completionJourney.className = "completion-journey";
+    const completionJourneyTitle = document.createElement("h2");
+    completionJourneyTitle.textContent = "Journey";
+    this.completionJourneyDiagram = document.createElement("div");
+    this.completionJourneyDiagram.className = "journey-diagram";
+    this.completionJourneyDiagram.setAttribute("role", "img");
+    this.completionJourney.append(completionJourneyTitle, this.completionJourneyDiagram);
     this.completionCloseButton = document.createElement("button");
     this.completionCloseButton.type = "button";
     this.completionCloseButton.className = "completion-close";
@@ -298,7 +319,11 @@ export class Hud {
     this.dismissedRoundActionButton.type = "button";
     this.dismissedRoundActionButton.className = "dismissed-round-action";
     this.dismissedRoundActionButton.hidden = true;
-    this.dismissedRoundActionButton.addEventListener("click", callbacks.onAdvanceRound);
+    this.dismissedRoundActionButton.addEventListener("click", () => {
+      this.completionDismissed = false;
+      this.completionOverlay.hidden = false;
+      this.dismissedRoundActionButton.hidden = true;
+    });
     this.gameplayExitButton = document.createElement("button");
     this.gameplayExitButton.type = "button";
     this.gameplayExitButton.className = "gameplay-exit-button";
@@ -344,6 +369,7 @@ export class Hud {
       this.completionCloseButton,
       this.completionTitle,
       this.completionStats,
+      this.completionJourney,
       this.completionMeta,
       completionActions,
     );
@@ -596,6 +622,8 @@ export class Hud {
       this.completionTime.textContent = formatMilliseconds(elapsed);
       this.completionMoves.textContent = String(state.moveCount);
       this.completionChanges.textContent = String(state.changeCount);
+      this.renderCompletionJourney(state);
+      this.completionJourney.hidden = false;
       this.completionMeta.hidden = true;
       this.completionStats.hidden = false;
       this.completionCloseButton.hidden = false;
@@ -603,6 +631,56 @@ export class Hud {
       this.dismissedRoundActionButton.textContent = actionLabel;
       this.ensureZoomControls();
     }
+  }
+
+  private renderCompletionJourney(state: GameState): void {
+    if (this.renderedCompletionJourneyLegs === state.journeyLegs) {
+      return;
+    }
+    this.renderedCompletionJourneyLegs = state.journeyLegs;
+
+    const summary = createJourneySummary(state);
+    const stationNames = summary.stops.map((stop) =>
+      formatJourneyStationName(getStation(this.network, stop.stationId).name)
+    );
+    const lineNames = summary.segments.map((segment) => LINE_BY_ID[segment.lineId].name);
+    const routeDescription = stationNames.length > 2
+      ? `${stationNames[0]}, changing at ${stationNames.slice(1, -1).join(", ")}, to ${stationNames.at(-1)}`
+      : `${stationNames[0]} to ${stationNames[1]}`;
+
+    this.completionJourneyDiagram.ariaLabel = `Journey ${routeDescription}. Lines: ${lineNames.join(", ")}.`;
+
+    const viewport = document.createElement("div");
+    viewport.className = "journey-viewport";
+    const route = document.createElement("div");
+    route.className = "journey-route";
+    route.style.minWidth = `${Math.max(360, summary.stops.length * 112)}px`;
+    route.style.setProperty(
+      "--journey-line-width",
+      `${(LINE_STROKE_WIDTH / GRID_CELL_SIZE) * JOURNEY_MARKER_SIZE}px`,
+    );
+
+    summary.stops.forEach((stop, index) => {
+      const lineId = index === summary.stops.length - 1
+        ? summary.segments[index - 1].lineId
+        : summary.segments[index].lineId;
+      route.append(createJourneyStop(stationNames[index], stop.kind, LINE_BY_ID[lineId].color));
+
+      const segment = summary.segments[index];
+      if (segment) {
+        const line = LINE_BY_ID[segment.lineId];
+        const segmentElement = document.createElement("div");
+        segmentElement.className = segment.lineId === "walk"
+          ? "journey-segment journey-segment-walk"
+          : "journey-segment";
+        segmentElement.style.setProperty("--journey-line-color", line.color);
+        segmentElement.title = line.name;
+        route.append(segmentElement);
+      }
+    });
+
+    viewport.append(route);
+    this.completionJourneyDiagram.replaceChildren(viewport);
   }
 
   showMapViewer(): void {
@@ -1008,6 +1086,37 @@ function completionStat(label: string, valueElement: HTMLSpanElement): HTMLDivEl
   valueElement.className = "completion-stat-value";
   wrapper.append(labelElement, valueElement);
   return wrapper;
+}
+
+function createJourneyStop(
+  stationName: string,
+  kind: "start" | "interchange" | "destination",
+  lineColor: string,
+): HTMLDivElement {
+  const stop = document.createElement("div");
+  stop.className = `journey-stop journey-stop-${kind}`;
+
+  const marker = document.createElementNS(SVG_NS, "svg");
+  marker.setAttribute(
+    "viewBox",
+    `${-GRID_CELL_SIZE / 2} ${-GRID_CELL_SIZE / 2} ${GRID_CELL_SIZE} ${GRID_CELL_SIZE}`,
+  );
+  marker.setAttribute("width", String(JOURNEY_MARKER_SIZE));
+  marker.setAttribute("height", String(JOURNEY_MARKER_SIZE));
+  marker.setAttribute("class", "journey-marker");
+  marker.ariaHidden = "true";
+  marker.append(
+    kind === "interchange"
+      ? createInterchangeMarker("journey-interchange-marker", INTERCHANGE_OUTLINE_WIDTH / 2)
+      : createBarMarker({ x: 1, y: 0 }, lineColor),
+  );
+
+  const label = document.createElement("span");
+  label.className = "journey-station-name";
+  label.textContent = stationName;
+
+  stop.append(marker, label);
+  return stop;
 }
 
 function tableCell(content: string | HTMLElement, tag: "td" | "th" = "td"): HTMLTableCellElement {

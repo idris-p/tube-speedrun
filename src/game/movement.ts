@@ -1,6 +1,7 @@
 import { createConnectionId } from "../data/network";
 import type { Connection, GridPoint, NetworkData, Point, Station } from "../data/types";
 import type { GameState } from "./GameState";
+import { isCountedLineChange } from "./journey";
 
 export type MovementDirection =
   | "north"
@@ -235,8 +236,7 @@ export function attemptMoveInDirection(
   const completed = target.id === state.destinationStationId;
   const changedLineOnDeparture =
     state.enteredStationLineId !== null &&
-    state.enteredStationLineId !== state.selectedLineId &&
-    !(state.enteredStationLineId !== "walk" && state.selectedLineId === "walk");
+    isCountedLineChange(state.enteredStationLineId, state.selectedLineId);
 
   return {
     state: {
@@ -244,6 +244,14 @@ export function attemptMoveInDirection(
       currentStationId: target.id,
       enteredStationLineId: state.selectedLineId,
       revealedConnections,
+      journeyLegs: [
+        ...state.journeyLegs,
+        {
+          fromStationId: state.currentStationId,
+          toStationId: target.id,
+          lineId: state.selectedLineId,
+        },
+      ],
       moveCount: state.moveCount + 1,
       changeCount: state.changeCount + (changedLineOnDeparture ? 1 : 0),
       completed,

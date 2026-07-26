@@ -5,7 +5,7 @@ import { GRID_CELL_SIZE, gridPointToSvgPoint } from "./grid";
 import type { StationMarkerGroup } from "./corridorLayout";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const INTERCHANGE_OUTLINE_WIDTH = 12;
+export const INTERCHANGE_OUTLINE_WIDTH = 12;
 const INTERCHANGE_OUTER_RADIUS = GRID_CELL_SIZE / 2;
 const INTERCHANGE_RADIUS = INTERCHANGE_OUTER_RADIUS - INTERCHANGE_OUTLINE_WIDTH / 2;
 export const STATION_BAR_MARKER_LENGTH = GRID_CELL_SIZE;
@@ -291,12 +291,15 @@ function createCurrentHighlight(lineId: LineId): SVGCircleElement {
   return highlight;
 }
 
-function createInterchangeMarker(className = "interchange-marker"): SVGCircleElement {
+export function createInterchangeMarker(
+  className = "interchange-marker",
+  outlineWidth = INTERCHANGE_OUTLINE_WIDTH,
+): SVGCircleElement {
   const marker = document.createElementNS(SVG_NS, "circle");
-  marker.setAttribute("r", String(INTERCHANGE_RADIUS));
+  marker.setAttribute("r", String(INTERCHANGE_OUTER_RADIUS - outlineWidth / 2));
   marker.setAttribute("fill", "#ffffff");
   marker.setAttribute("stroke", "#111111");
-  marker.setAttribute("stroke-width", String(INTERCHANGE_OUTLINE_WIDTH));
+  marker.setAttribute("stroke-width", String(outlineWidth));
   marker.setAttribute("class", className);
   return marker;
 }
@@ -396,7 +399,7 @@ function subtract(point: Point, origin: Point): Point {
   return { x: point.x - origin.x, y: point.y - origin.y };
 }
 
-function createBarMarker(lineDirection: Point, color: string): SVGLineElement {
+export function createBarMarker(lineDirection: Point, color: string): SVGLineElement {
   const perpendicular = { x: -lineDirection.y, y: lineDirection.x };
   const marker = document.createElementNS(SVG_NS, "line");
   marker.setAttribute("x1", String(-perpendicular.x * BAR_HALF_LENGTH));

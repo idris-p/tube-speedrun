@@ -10,12 +10,19 @@ export type GameState = {
   selectedLineId: LineId;
   enteredStationLineId: LineId | null;
   revealedConnections: Set<string>;
+  journeyLegs: JourneyLeg[];
   moveCount: number;
   changeCount: number;
   startTime: number;
   endTime: number | null;
   completed: boolean;
   rejectedMoveAt: number | null;
+};
+
+export type JourneyLeg = {
+  fromStationId: string;
+  toStationId: string;
+  lineId: LineId;
 };
 
 export function createGameState(seed: string, network: NetworkData, now: number): GameState {
@@ -43,6 +50,7 @@ export function createGameStateForRound(
     selectedLineId: startStation.lines[0],
     enteredStationLineId: null,
     revealedConnections: new Set<string>(),
+    journeyLegs: [],
     moveCount: 0,
     changeCount: 0,
     startTime: now,

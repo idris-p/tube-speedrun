@@ -432,7 +432,10 @@ svg text {
   z-index: 20;
   top: 50%;
   left: 50%;
-  width: min(620px, calc(100vw - 36px));
+  width: min(650px, calc(100vw - 36px));
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
+  box-sizing: border-box;
   transform: translate(-50%, -50%);
   border: 3px solid #111111;
   border-radius: 8px;
@@ -538,6 +541,91 @@ svg text {
   font-size: clamp(30px, 5vw, 42px);
   font-weight: 900;
   line-height: 1;
+}
+
+.completion-journey {
+  position: relative;
+  margin-top: 22px;
+  overflow: hidden;
+  border: 2px solid #111111;
+  border-radius: 7px;
+  background: #f7f2e5;
+}
+
+.completion-journey[hidden] {
+  display: none;
+}
+
+.completion-journey h2 {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  left: 16px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.journey-diagram {
+  min-width: 0;
+}
+
+.journey-viewport {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.journey-route {
+  display: flex;
+  align-items: center;
+  height: 140px;
+  box-sizing: border-box;
+  padding: 0 58px;
+}
+
+.journey-segment {
+  z-index: 0;
+  flex: 1 1 0;
+  height: var(--journey-line-width);
+  background: var(--journey-line-color);
+}
+
+.journey-segment-walk {
+  background: repeating-linear-gradient(
+    90deg,
+    #111111 0 5px,
+    transparent 5px 8.75px
+  );
+}
+
+.journey-stop {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 0;
+}
+
+.journey-marker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  transform: translate(-50%, -50%);
+}
+
+.journey-station-name {
+  position: absolute;
+  top: 20px;
+  left: -52px;
+  width: 104px;
+  color: #111111;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.15;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .completion-action {
