@@ -55,7 +55,21 @@ if (validationErrors.length > 0) {
   throw new Error(`Invalid network data:\n${validationErrors.join("\n")}`);
 }
 
-startGame();
+void boot();
+
+async function boot(): Promise<void> {
+  if (window.location.pathname === "/label-editor") {
+    if (!isDevMode()) {
+      appRoot.replaceChildren("Label editor is only available in development.");
+      return;
+    }
+    const { LabelEditor } = await import("./dev/LabelEditor");
+    new LabelEditor(appRoot, networkData);
+    return;
+  }
+
+  startGame();
+}
 
 function startGame(): void {
 let state: GameState | null = null;
@@ -618,4 +632,8 @@ function isStationVisible(
   );
 }
 
+}
+
+function isDevMode(): boolean {
+  return Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV);
 }

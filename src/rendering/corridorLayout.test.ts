@@ -272,7 +272,7 @@ describe("shared corridor layout", () => {
     ]);
   });
 
-  it("keeps Euston's bottom-right marker fixed while shortening the conjoined marker", () => {
+  it("moves both Euston markers down-left one cell", () => {
     const layout = new CorridorLayout(networkData);
     const groups = layout.getStationMarkerGroups("euston");
     const northern = groups.find((group) => group.lines.includes("northern"));
@@ -281,47 +281,51 @@ describe("shared corridor layout", () => {
     expect(groups).toHaveLength(2);
     expect(northern?.lines).toEqual(["northern"]);
     expect(victoria?.lines).toEqual(["victoria"]);
-    expect(gridPointFromSvgPoint(northern!.point)).toEqual({ x: 65, y: -27 });
-    expect(gridPointFromSvgPoint(layout.getStationLinePoint("euston", "walk"))).toEqual({ x: 65, y: -27 });
-    expect(gridPointFromSvgPoint(victoria!.point)).toEqual({ x: 67, y: -25 });
+    expect(gridPointFromSvgPoint(northern!.point)).toEqual({ x: 64, y: -26 });
+    expect(gridPointFromSvgPoint(layout.getStationLinePoint("euston", "walk"))).toEqual({ x: 64, y: -26 });
+    expect(gridPointFromSvgPoint(victoria!.point)).toEqual({ x: 66, y: -24 });
     expect(victoria!.point.x - northern!.point.x).toBe(GRID_CELL_SIZE * 2);
     expect(victoria!.point.y - northern!.point.y).toBe(GRID_CELL_SIZE * 2);
   });
 
-  it("renders Victoria straight northeast from Warren Street into the Euston Victoria marker", () => {
+  it("shortens Victoria from Warren Street to Euston by one cell", () => {
     const layout = new CorridorLayout(networkData);
 
     expect(renderedGridPoints(layout, "victoria", "warren-street", "euston"))
-      .toEqual([{ x: 62, y: -20 }, { x: 67, y: -25 }]);
+      .toEqual([{ x: 62, y: -20 }, { x: 66, y: -24 }]);
     expect(renderedDirectionRuns(layout, "victoria", "warren-street", "euston"))
       .toEqual(["1,-1"]);
   });
 
-  it("makes King's Cross St Pancras a three-marker southwest-to-northeast interchange", () => {
+  it("routes Northern up two, up-right two, then up two from Warren Street to Euston", () => {
     const layout = new CorridorLayout(networkData);
-    const groups = layout.getStationMarkerGroups("king-s-cross-st-pancras");
-    const existing = groups.find((group) => !group.lines.includes("victoria") && !group.lines.includes("northern"));
-    const northern = groups.find((group) => group.lines.includes("northern"));
-    const victoria = groups.find((group) => group.lines.includes("victoria"));
 
-    expect(groups).toHaveLength(3);
-    expect(existing?.lines).toEqual(["circle", "hammersmith-city", "metropolitan", "piccadilly"]);
-    expect(northern?.lines).toEqual(["northern"]);
-    expect(victoria?.lines).toEqual(["victoria"]);
-    expect(gridPointFromSvgPoint(existing!.point)).toEqual({ x: 74, y: -22 });
-    expect(gridPointFromSvgPoint(northern!.point)).toEqual({ x: 76, y: -24 });
-    expect(gridPointFromSvgPoint(victoria!.point)).toEqual({ x: 77, y: -25 });
-    expect(northern!.point.x - existing!.point.x).toBe(GRID_CELL_SIZE * 2);
-    expect(northern!.point.y - existing!.point.y).toBe(-GRID_CELL_SIZE * 2);
-    expect(victoria!.point.x - northern!.point.x).toBe(GRID_CELL_SIZE);
-    expect(victoria!.point.y - northern!.point.y).toBe(-GRID_CELL_SIZE);
+    expect(renderedGridPoints(layout, "northern", "warren-street", "euston"))
+      .toEqual([{ x: 62, y: -20 }, { x: 62, y: -22 }, { x: 64, y: -24 }, { x: 64, y: -26 }]);
+    expect(renderedDirectionRuns(layout, "northern", "warren-street", "euston"))
+      .toEqual(["0,-1", "1,-1", "0,-1"]);
   });
 
-  it("renders Victoria horizontally from Euston to King's Cross St Pancras", () => {
+  it("joins Victoria to the Northern marker at King's Cross St Pancras", () => {
+    const layout = new CorridorLayout(networkData);
+    const groups = layout.getStationMarkerGroups("king-s-cross-st-pancras");
+    const existing = groups.find((group) => !group.lines.includes("northern"));
+    const northernAndVictoria = groups.find((group) => group.lines.includes("northern"));
+
+    expect(groups).toHaveLength(2);
+    expect(existing?.lines).toEqual(["circle", "hammersmith-city", "metropolitan", "piccadilly"]);
+    expect(northernAndVictoria?.lines).toEqual(["northern", "victoria"]);
+    expect(gridPointFromSvgPoint(existing!.point)).toEqual({ x: 74, y: -22 });
+    expect(gridPointFromSvgPoint(northernAndVictoria!.point)).toEqual({ x: 76, y: -24 });
+    expect(northernAndVictoria!.point.x - existing!.point.x).toBe(GRID_CELL_SIZE * 2);
+    expect(northernAndVictoria!.point.y - existing!.point.y).toBe(-GRID_CELL_SIZE * 2);
+  });
+
+  it("renders Victoria straight horizontally from Euston to King's Cross", () => {
     const layout = new CorridorLayout(networkData);
 
     expect(renderedGridPoints(layout, "victoria", "euston", "king-s-cross-st-pancras"))
-      .toEqual([{ x: 67, y: -25 }, { x: 77, y: -25 }]);
+      .toEqual([{ x: 66, y: -24 }, { x: 76, y: -24 }]);
     expect(renderedDirectionRuns(layout, "victoria", "euston", "king-s-cross-st-pancras"))
       .toEqual(["1,0"]);
   });
@@ -334,7 +338,7 @@ describe("shared corridor layout", () => {
     expect(renderedDirectionRuns(layout, "northern", "angel", "king-s-cross-st-pancras"))
       .toEqual(["-1,0", "-1,-1"]);
     expect(renderedGridPoints(layout, "northern", "king-s-cross-st-pancras", "euston"))
-      .toEqual([{ x: 76, y: -24 }, { x: 73, y: -27 }, { x: 65, y: -27 }]);
+      .toEqual([{ x: 76, y: -24 }, { x: 74, y: -26 }, { x: 64, y: -26 }]);
     expect(renderedDirectionRuns(layout, "northern", "king-s-cross-st-pancras", "euston"))
       .toEqual(["-1,-1", "-1,0"]);
   });
@@ -371,7 +375,7 @@ describe("shared corridor layout", () => {
     const layout = new CorridorLayout(networkData);
 
     expect(renderedGridPoints(layout, "victoria", "king-s-cross-st-pancras", "highbury-and-islington"))
-      .toEqual([{ x: 77, y: -25 }, { x: 87, y: -25 }, { x: 92, y: -30 }, { x: 92, y: -36 }]);
+      .toEqual([{ x: 76, y: -24 }, { x: 86, y: -24 }, { x: 92, y: -30 }, { x: 92, y: -36 }]);
     expect(renderedDirectionRuns(layout, "victoria", "king-s-cross-st-pancras", "highbury-and-islington"))
       .toEqual(["1,0", "1,-1", "0,-1"]);
     expect(renderedGridPoints(layout, "victoria", "highbury-and-islington", "finsbury-park"))

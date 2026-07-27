@@ -86,10 +86,10 @@ const STATION_LINE_POINT_OVERRIDES = new Map<string, GridPoint>([
   ["paddington|bakerloo", { x: 16, y: -20 }],
   ["bank|northern", { x: 90, y: -6 }],
   ["bank|walk", { x: 90, y: -6 }],
-  ["euston|victoria", { x: 67, y: -25 }],
+  ["euston|victoria", { x: 66, y: -24 }],
   ["finchley-road|jubilee", { x: 33, y: -35 }],
   ["king-s-cross-st-pancras|northern", { x: 76, y: -24 }],
-  ["king-s-cross-st-pancras|victoria", { x: 77, y: -25 }],
+  ["king-s-cross-st-pancras|victoria", { x: 76, y: -24 }],
   ["finsbury-park|victoria", { x: 95, y: -45 }],
   ["wembley-park|jubilee", { x: 15, y: -53 }],
   ["stratford|central", { x: 148, y: -30 }],
@@ -135,14 +135,17 @@ const CONNECTION_POINT_OVERRIDES = new Map<string, GridPoint[]>([
   ["elizabeth:canary-wharf-elizabeth-line:whitechapel", [{ x: 119, y: -13 }, { x: 142, y: 10 }]],
   ["elizabeth:liverpool-street:whitechapel", [{ x: 119, y: -13 }, { x: 92, y: -13 }]],
   ["elizabeth:stratford:whitechapel", [{ x: 150, y: -30 }, { x: 142, y: -22 }, { x: 128, y: -22 }, { x: 119, y: -13 }]],
-  ["victoria:euston:warren-street", [{ x: 62, y: -20 }, { x: 67, y: -25 }]],
-  ["victoria:euston:king-s-cross-st-pancras", [{ x: 67, y: -25 }, { x: 77, y: -25 }]],
+  ["victoria:euston:warren-street", [{ x: 62, y: -20 }, { x: 66, y: -24 }]],
+  [
+    "victoria:euston:king-s-cross-st-pancras",
+    [{ x: 66, y: -24 }, { x: 76, y: -24 }],
+  ],
   ["northern:bank:moorgate", [{ x: 90, y: -6 }, { x: 90, y: -8 }, { x: 88, y: -10 }, { x: 88, y: -12 }]],
   ["northern:bank:london-bridge", [{ x: 90, y: -6 }, { x: 90, y: 10 }]],
   ["walk:bank:monument", [{ x: 90, y: -6 }, { x: 96, y: 0 }]],
   [
     "victoria:highbury-and-islington:king-s-cross-st-pancras",
-    [{ x: 77, y: -25 }, { x: 87, y: -25 }, { x: 92, y: -30 }, { x: 92, y: -36 }],
+    [{ x: 76, y: -24 }, { x: 86, y: -24 }, { x: 92, y: -30 }, { x: 92, y: -36 }],
   ],
   [
     "victoria:finsbury-park:highbury-and-islington",
@@ -157,7 +160,7 @@ const CONNECTION_POINT_OVERRIDES = new Map<string, GridPoint[]>([
   ["bakerloo:kilburn-park:queen-s-park", [{ x: -2, y: -30 }, { x: -2, y: -28 }, { x: 0, y: -26 }]],
   ["bakerloo:kensal-green:queen-s-park", [{ x: -2, y: -34 }, { x: -2, y: -30 }]],
   ["northern:angel:king-s-cross-st-pancras", [{ x: 82, y: -22 }, { x: 78, y: -22 }, { x: 76, y: -24 }]],
-  ["northern:euston:king-s-cross-st-pancras", [{ x: 65, y: -27 }, { x: 73, y: -27 }, { x: 76, y: -24 }]],
+  ["northern:euston:king-s-cross-st-pancras", [{ x: 64, y: -26 }, { x: 74, y: -26 }, { x: 76, y: -24 }]],
 ]);
 
 export type StationMarkerGroup = {
