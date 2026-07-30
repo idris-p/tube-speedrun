@@ -26,6 +26,10 @@ export type HudCallbacks = {
   onAdvanceRound: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
+  onOpenGameplayMap: () => void;
+  onFocusGameplayMapStation: (stationId: string) => void;
+  onGameplayMapZoomIn: () => void;
+  onGameplayMapZoomOut: () => void;
 };
 
 export type MenuMode = "home" | "how-to-play" | "seed-choice" | "seed-entry";
@@ -42,6 +46,7 @@ const JOURNEY_MARKER_SIZE = 20;
 
 export class Hud {
   readonly mapHost: HTMLDivElement;
+  readonly gameplayMapHost: HTMLDivElement;
 
   private readonly shell: HTMLElement;
   private readonly statsPanel: HTMLDivElement;
@@ -71,6 +76,10 @@ export class Hud {
   private readonly dismissedRoundActionButton: HTMLButtonElement;
   private readonly gameplayExitButton: HTMLButtonElement;
   private readonly gameplayHelpButton: HTMLButtonElement;
+  private readonly gameplayMapButton: HTMLButtonElement;
+  private readonly gameplayMapOverlay: HTMLDivElement;
+  private readonly gameplayMapSearchInput: HTMLInputElement;
+  private readonly gameplayMapSearchResults: HTMLDivElement;
   private readonly exitConfirmOverlay: HTMLDivElement;
   private readonly resultsOverlay: HTMLDivElement;
   private readonly resultsSeedLabel: HTMLSpanElement;
@@ -96,10 +105,13 @@ export class Hud {
   private readonly mapSearchEntries: MapSearchEntry[];
   private mapSearchVisibleEntries: MapSearchEntry[] = [];
   private mapSearchActiveIndex = -1;
+  private gameplayMapSearchVisibleEntries: MapSearchEntry[] = [];
+  private gameplayMapSearchActiveIndex = -1;
   private readonly network: NetworkData;
   private readonly callbacks: HudCallbacks;
   private menuMode: MenuMode = "home";
   private gameplayHelpOpen = false;
+  private gameplayMapOpen = false;
   private completionDismissed = false;
   private renderedCompletionJourneyLegs: GameState["journeyLegs"] | null = null;
 
@@ -354,6 +366,139 @@ export class Hud {
     this.gameplayHelpButton.title = "How to Play";
     this.gameplayHelpButton.hidden = true;
     this.gameplayHelpButton.addEventListener("click", () => this.openGameplayHelp());
+    this.gameplayMapButton = document.createElement("button");
+    this.gameplayMapButton.type = "button";
+    this.gameplayMapButton.className = "gameplay-map-button";
+    this.gameplayMapButton.ariaLabel = "Open network map";
+    this.gameplayMapButton.title = "Open network map";
+    this.gameplayMapButton.hidden = true;
+    this.gameplayMapButton.append(mapMarkerIcon());
+    this.gameplayMapButton.addEventListener("click", () => this.openGameplayMap());
+
+    this.gameplayMapOverlay = document.createElement("div");
+    this.gameplayMapOverlay.className = "gameplay-map-overlay";
+    this.gameplayMapOverlay.hidden = true;
+    this.gameplayMapOverlay.addEventListener("pointerdown", (event) => {
+      if (event.target === this.gameplayMapOverlay) {
+        this.closeGameplayMap();
+      }
+    });
+    const gameplayMapDialog = document.createElement("section");
+    gameplayMapDialog.className = "gameplay-map-dialog";
+    gameplayMapDialog.setAttribute("role", "dialog");
+    gameplayMapDialog.setAttribute("aria-modal", "true");
+    gameplayMapDialog.ariaLabel = "London transport network map";
+    this.gameplayMapHost = document.createElement("div");
+    this.gameplayMapHost.className = "gameplay-map-host";
+    const gameplayMapBack = document.createElement("button");
+    gameplayMapBack.type = "button";
+    gameplayMapBack.className = "gameplay-map-back";
+    gameplayMapBack.textContent = "\u2190 Back";
+    gameplayMapBack.addEventListener("click", () => this.closeGameplayMap());
+    const gameplayMapZoom = document.createElement("div");
+    gameplayMapZoom.className = "gameplay-map-zoom";
+    gameplayMapZoom.append(
+      zoomButton("+", "Zoom in", callbacks.onGameplayMapZoomIn),
+      zoomButton("-", "Zoom out", callbacks.onGameplayMapZoomOut),
+    );
+    const gameplayMapSearchForm = document.createElement("form");
+    gameplayMapSearchForm.className = "map-search-form gameplay-map-search-form";
+    this.gameplayMapSearchInput = document.createElement("input");
+    this.gameplayMapSearchInput.type = "search";
+    this.gameplayMapSearchInput.placeholder = "Search for a station";
+    this.gameplayMapSearchInput.ariaLabel = "Search for a station";
+    this.gameplayMapSearchInput.autocomplete = "off";
+    this.gameplayMapSearchInput.spellcheck = false;
+    this.gameplayMapSearchInput.setAttribute("role", "combobox");
+    this.gameplayMapSearchInput.setAttribute("aria-autocomplete", "list");
+    this.gameplayMapSearchInput.setAttribute("aria-controls", "gameplay-map-station-results");
+    this.gameplayMapSearchInput.setAttribute("aria-expanded", "false");
+    this.gameplayMapSearchResults = document.createElement("div");
+    this.gameplayMapSearchResults.id = "gameplay-map-station-results";
+    this.gameplayMapSearchResults.className = "map-search-results";
+    this.gameplayMapSearchResults.setAttribute("role", "listbox");
+    this.gameplayMapSearchResults.hidden = true;
+    const gameplayMapSearchButton = document.createElement("button");
+    gameplayMapSearchButton.type = "submit";
+    gameplayMapSearchButton.className = "map-search-submit";
+    gameplayMapSearchButton.textContent = "Find";
+    gameplayMapSearchForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const stationId = findMapSearchStationId(
+        this.mapSearchEntries,
+        this.gameplayMapSearchInput.value,
+      );
+      if (!stationId) {
+        this.gameplayMapSearchInput.setCustomValidity("Choose a station from the list.");
+        this.gameplayMapSearchInput.reportValidity();
+        return;
+      }
+      this.gameplayMapSearchInput.setCustomValidity("");
+      callbacks.onFocusGameplayMapStation(stationId);
+      this.hideGameplayMapSearchResults();
+      this.gameplayMapSearchInput.blur();
+    });
+    this.gameplayMapSearchInput.addEventListener("focus", () => {
+      this.renderGameplayMapSearchResults();
+    });
+    this.gameplayMapSearchInput.addEventListener("input", () => {
+      this.gameplayMapSearchInput.setCustomValidity("");
+      this.renderGameplayMapSearchResults();
+    });
+    this.gameplayMapSearchInput.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        this.hideGameplayMapSearchResults();
+        return;
+      }
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        if (this.gameplayMapSearchResults.hidden) {
+          this.renderGameplayMapSearchResults();
+        }
+        if (this.gameplayMapSearchVisibleEntries.length === 0) {
+          return;
+        }
+        const direction = event.key === "ArrowDown" ? 1 : -1;
+        const nextIndex = this.gameplayMapSearchActiveIndex < 0
+          ? direction > 0 ? 0 : this.gameplayMapSearchVisibleEntries.length - 1
+          : (this.gameplayMapSearchActiveIndex + direction +
+            this.gameplayMapSearchVisibleEntries.length) %
+            this.gameplayMapSearchVisibleEntries.length;
+        this.setGameplayMapSearchActiveIndex(nextIndex);
+        return;
+      }
+      if (
+        event.key === "Enter" &&
+        !this.gameplayMapSearchResults.hidden &&
+        this.gameplayMapSearchActiveIndex >= 0
+      ) {
+        event.preventDefault();
+        const entry = this.gameplayMapSearchVisibleEntries[this.gameplayMapSearchActiveIndex];
+        if (entry) {
+          this.selectGameplayMapSearchEntry(entry);
+        }
+      }
+    });
+    gameplayMapSearchForm.addEventListener("focusout", () => {
+      window.setTimeout(() => {
+        if (!gameplayMapSearchForm.contains(document.activeElement)) {
+          this.hideGameplayMapSearchResults();
+        }
+      }, 0);
+    });
+    gameplayMapSearchForm.append(
+      this.gameplayMapSearchInput,
+      gameplayMapSearchButton,
+      this.gameplayMapSearchResults,
+    );
+    gameplayMapDialog.append(this.gameplayMapHost, gameplayMapSearchForm, gameplayMapZoom);
+    this.gameplayMapOverlay.append(gameplayMapBack, gameplayMapDialog);
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && this.gameplayMapOpen) {
+        this.closeGameplayMap();
+      }
+    });
     this.exitConfirmOverlay = document.createElement("div");
     this.exitConfirmOverlay.className = "exit-confirm-overlay";
     this.exitConfirmOverlay.hidden = true;
@@ -478,6 +623,8 @@ export class Hud {
       this.exitConfirmOverlay,
       this.gameplayExitButton,
       this.gameplayHelpButton,
+      this.gameplayMapButton,
+      this.gameplayMapOverlay,
       this.dismissedRoundActionButton,
       this.resultsOverlay,
     );
@@ -485,6 +632,7 @@ export class Hud {
 
   showMenu(): void {
     this.resetGameplayHelp();
+    this.resetGameplayMap();
     this.shell.classList.remove("map-viewer-active");
     this.mapViewerControls.hidden = true;
     this.mapSearchInput.value = "";
@@ -499,6 +647,7 @@ export class Hud {
 
   showSeedChoiceMenu(): void {
     this.resetGameplayHelp();
+    this.resetGameplayMap();
     this.shell.classList.remove("map-viewer-active");
     this.mapViewerControls.hidden = true;
     this.completionDismissed = false;
@@ -510,6 +659,7 @@ export class Hud {
 
   showResults(results: RunResults): void {
     this.resetGameplayHelp();
+    this.resetGameplayMap();
     this.shell.classList.remove("map-viewer-active");
     this.mapViewerControls.hidden = true;
     this.shell.classList.remove("countdown-active");
@@ -522,6 +672,7 @@ export class Hud {
     this.completionOverlay.hidden = true;
     this.gameplayExitButton.hidden = true;
     this.gameplayHelpButton.hidden = true;
+    this.gameplayMapButton.hidden = true;
     this.countdownOverlay.hidden = true;
     this.exitConfirmOverlay.hidden = true;
     this.dismissedRoundActionButton.hidden = true;
@@ -564,6 +715,7 @@ export class Hud {
 
   showCountdown(value: number): void {
     this.resetGameplayHelp();
+    this.resetGameplayMap();
     this.shell.classList.remove("map-viewer-active");
     this.mapViewerControls.hidden = true;
     this.shell.classList.remove("menu-active");
@@ -576,6 +728,7 @@ export class Hud {
     this.completionOverlay.hidden = true;
     this.gameplayExitButton.hidden = true;
     this.gameplayHelpButton.hidden = true;
+    this.gameplayMapButton.hidden = true;
     this.countdownOverlay.hidden = false;
     this.countdownValue.textContent = String(value);
     this.exitConfirmOverlay.hidden = true;
@@ -594,6 +747,7 @@ export class Hud {
     this.mapViewerControls.hidden = true;
     if (!state) {
       this.gameplayHelpOpen = false;
+      this.resetGameplayMap();
       this.shell.classList.remove("gameplay-help-active");
       this.shell.classList.remove("countdown-active");
       this.shell.classList.add("menu-active");
@@ -605,6 +759,7 @@ export class Hud {
       this.completionOverlay.hidden = true;
       this.gameplayExitButton.hidden = true;
       this.gameplayHelpButton.hidden = true;
+      this.gameplayMapButton.hidden = true;
       this.countdownOverlay.hidden = true;
       this.exitConfirmOverlay.hidden = true;
       this.resultsOverlay.hidden = true;
@@ -615,19 +770,24 @@ export class Hud {
 
     if (state.completed) {
       this.gameplayHelpOpen = false;
+      this.resetGameplayMap();
     }
     this.shell.classList.remove("countdown-active");
     this.shell.classList.toggle("menu-active", this.gameplayHelpOpen);
     this.shell.classList.toggle("gameplay-help-active", this.gameplayHelpOpen);
-    this.statsPanel.hidden = false;
-    this.timerPanel.hidden = false;
-    this.lineIndicator.hidden = false;
-    this.temporaryBanner.hidden = !this.network.temporary;
+    this.statsPanel.hidden = this.gameplayHelpOpen;
+    this.timerPanel.hidden = this.gameplayHelpOpen;
+    this.lineIndicator.hidden = this.gameplayHelpOpen;
+    this.temporaryBanner.hidden = this.gameplayHelpOpen || !this.network.temporary;
     this.menuOverlay.hidden = !this.gameplayHelpOpen;
     this.countdownOverlay.hidden = true;
     this.resultsOverlay.hidden = true;
-    this.gameplayExitButton.hidden = this.gameplayHelpOpen;
-    this.gameplayHelpButton.hidden = !shouldShowGameplayHelpButton(state.completed, this.gameplayHelpOpen);
+    this.gameplayExitButton.hidden = this.gameplayHelpOpen || this.gameplayMapOpen;
+    this.gameplayHelpButton.hidden = !shouldShowGameplayHelpButton(
+      state.completed,
+      this.gameplayHelpOpen || this.gameplayMapOpen,
+    );
+    this.gameplayMapButton.hidden = state.completed || this.gameplayHelpOpen || this.gameplayMapOpen;
 
     const startStation = getStation(this.network, state.startStationId);
     const destination = getStation(this.network, state.destinationStationId);
@@ -720,6 +880,7 @@ export class Hud {
 
   showMapViewer(): void {
     this.resetGameplayHelp();
+    this.resetGameplayMap();
     this.shell.classList.remove("menu-active", "countdown-active");
     this.shell.classList.add("map-viewer-active");
     this.statsPanel.hidden = true;
@@ -730,6 +891,7 @@ export class Hud {
     this.completionOverlay.hidden = true;
     this.gameplayExitButton.hidden = true;
     this.gameplayHelpButton.hidden = true;
+    this.gameplayMapButton.hidden = true;
     this.countdownOverlay.hidden = true;
     this.exitConfirmOverlay.hidden = true;
     this.dismissedRoundActionButton.hidden = true;
@@ -865,10 +1027,117 @@ export class Hud {
     return this.gameplayHelpOpen;
   }
 
+  isGameplayOverlayOpen(): boolean {
+    return this.gameplayHelpOpen || this.gameplayMapOpen;
+  }
+
+  private openGameplayMap(): void {
+    this.gameplayMapOpen = true;
+    this.shell.classList.add("gameplay-map-active");
+    this.gameplayMapOverlay.hidden = false;
+    this.gameplayExitButton.hidden = true;
+    this.gameplayHelpButton.hidden = true;
+    this.gameplayMapButton.hidden = true;
+    this.gameplayMapSearchInput.value = "";
+    this.hideGameplayMapSearchResults();
+    this.callbacks.onOpenGameplayMap();
+  }
+
+  private closeGameplayMap(): void {
+    this.gameplayMapOpen = false;
+    this.shell.classList.remove("gameplay-map-active");
+    this.gameplayMapOverlay.hidden = true;
+    this.gameplayExitButton.hidden = false;
+    this.gameplayHelpButton.hidden = false;
+    this.gameplayMapButton.hidden = false;
+  }
+
+  private resetGameplayMap(): void {
+    this.gameplayMapOpen = false;
+    this.shell.classList.remove("gameplay-map-active");
+    this.gameplayMapOverlay.hidden = true;
+    this.gameplayMapButton.hidden = true;
+    this.gameplayMapSearchInput.value = "";
+    this.hideGameplayMapSearchResults();
+  }
+
+  private renderGameplayMapSearchResults(): void {
+    this.gameplayMapSearchVisibleEntries = filterMapSearchEntries(
+      this.mapSearchEntries,
+      this.gameplayMapSearchInput.value,
+    );
+    this.gameplayMapSearchActiveIndex = -1;
+    this.gameplayMapSearchResults.replaceChildren(
+      ...this.gameplayMapSearchVisibleEntries.map((entry, index) => {
+        const option = document.createElement("button");
+        option.type = "button";
+        option.id = `gameplay-map-station-result-${entry.stationId}`;
+        option.className = "map-search-result";
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", "false");
+        option.tabIndex = -1;
+        option.textContent = entry.label;
+        option.addEventListener("pointerdown", (event) => event.preventDefault());
+        option.addEventListener("pointerenter", () => {
+          this.setGameplayMapSearchActiveIndex(index);
+        });
+        option.addEventListener("click", () => this.selectGameplayMapSearchEntry(entry));
+        return option;
+      }),
+    );
+    this.gameplayMapSearchResults.hidden =
+      this.gameplayMapSearchVisibleEntries.length === 0;
+    this.gameplayMapSearchInput.setAttribute(
+      "aria-expanded",
+      String(!this.gameplayMapSearchResults.hidden),
+    );
+  }
+
+  private setGameplayMapSearchActiveIndex(index: number): void {
+    if (this.gameplayMapSearchVisibleEntries.length === 0) {
+      return;
+    }
+    this.gameplayMapSearchActiveIndex = Math.max(
+      0,
+      Math.min(index, this.gameplayMapSearchVisibleEntries.length - 1),
+    );
+    const options = [
+      ...this.gameplayMapSearchResults.querySelectorAll<HTMLButtonElement>(".map-search-result"),
+    ];
+    options.forEach((option, optionIndex) => {
+      const active = optionIndex === this.gameplayMapSearchActiveIndex;
+      option.classList.toggle("map-search-result-active", active);
+      option.setAttribute("aria-selected", String(active));
+      if (active) {
+        this.gameplayMapSearchInput.setAttribute("aria-activedescendant", option.id);
+        option.scrollIntoView({ block: "nearest" });
+      }
+    });
+  }
+
+  private selectGameplayMapSearchEntry(entry: MapSearchEntry): void {
+    this.gameplayMapSearchInput.value = entry.label;
+    this.gameplayMapSearchInput.setCustomValidity("");
+    this.callbacks.onFocusGameplayMapStation(entry.stationId);
+    this.hideGameplayMapSearchResults();
+    this.gameplayMapSearchInput.blur();
+  }
+
+  private hideGameplayMapSearchResults(): void {
+    this.gameplayMapSearchResults.hidden = true;
+    this.gameplayMapSearchActiveIndex = -1;
+    this.gameplayMapSearchInput.setAttribute("aria-expanded", "false");
+    this.gameplayMapSearchInput.removeAttribute("aria-activedescendant");
+  }
+
   private openGameplayHelp(): void {
     this.gameplayHelpOpen = true;
     this.setMenuMode("how-to-play");
     this.shell.classList.add("menu-active", "gameplay-help-active");
+    this.statsPanel.hidden = true;
+    this.timerPanel.hidden = true;
+    this.lineIndicator.hidden = true;
+    this.temporaryBanner.hidden = true;
     this.menuOverlay.hidden = false;
     this.gameplayExitButton.hidden = true;
     this.gameplayHelpButton.hidden = true;
@@ -1219,6 +1488,21 @@ function renderMilliseconds(element: HTMLElement, milliseconds: number): void {
 
 export function shouldShowUnsupportedDeviceMessage(mode: MenuMode, pointerIsCoarse: boolean): boolean {
   return mode === "home" && pointerIsCoarse;
+}
+
+function mapMarkerIcon(): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("class", "button-icon");
+
+  const marker = document.createElementNS(SVG_NS, "path");
+  marker.setAttribute(
+    "d",
+    "M 12 2.5 C 7.9 2.5 4.6 5.8 4.6 9.9 C 4.6 15.3 12 22 12 22 C 12 22 19.4 15.3 19.4 9.9 C 19.4 5.8 16.1 2.5 12 2.5 Z M 12 6.8 A 3.1 3.1 0 1 1 12 13 A 3.1 3.1 0 1 1 12 6.8 Z",
+  );
+  svg.append(marker);
+  return svg;
 }
 
 export function shouldShowGameplayHelpButton(roundCompleted: boolean, helpOpen: boolean): boolean {

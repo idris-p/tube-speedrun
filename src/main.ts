@@ -104,6 +104,9 @@ let cameraPanAnimation: {
   to: Point;
   startedAt: number;
 } | null = null;
+let gameplayMapRenderer: MapRenderer;
+let gameplayMapPanPointerId: number | null = null;
+let gameplayMapLastPanPoint: Point | null = null;
 
 const hud = new Hud(appRoot, networkData, {
   onStartRandomSeed: () => startRun(generateSeed(), "random"),
@@ -161,9 +164,70 @@ const hud = new Hud(appRoot, networkData, {
     renderer.zoomOut();
     render();
   },
+  onOpenGameplayMap: () => {
+    gameplayMapRenderer.resetExplorerView();
+    gameplayMapRenderer.renderExplorer();
+  },
+  onFocusGameplayMapStation: (stationId) => {
+    gameplayMapRenderer.focusExplorerStation(stationId);
+    gameplayMapRenderer.renderExplorer();
+  },
+  onGameplayMapZoomIn: () => {
+    gameplayMapRenderer.zoomIn();
+    gameplayMapRenderer.renderExplorer();
+  },
+  onGameplayMapZoomOut: () => {
+    gameplayMapRenderer.zoomOut();
+    gameplayMapRenderer.renderExplorer();
+  },
 });
 
 const renderer = new MapRenderer(hud.mapHost, networkData);
+gameplayMapRenderer = new MapRenderer(hud.gameplayMapHost, networkData);
+
+gameplayMapRenderer.svg.addEventListener("wheel", (event) => {
+  event.preventDefault();
+  gameplayMapRenderer.zoomByWheel(event.deltaY);
+  gameplayMapRenderer.renderExplorer();
+}, { passive: false });
+
+gameplayMapRenderer.svg.addEventListener("pointerdown", (event) => {
+  if (event.button !== 0) {
+    return;
+  }
+  gameplayMapPanPointerId = event.pointerId;
+  gameplayMapLastPanPoint = { x: event.clientX, y: event.clientY };
+  gameplayMapRenderer.svg.setPointerCapture(event.pointerId);
+  gameplayMapRenderer.svg.classList.add("tube-map-panning");
+  event.preventDefault();
+});
+
+gameplayMapRenderer.svg.addEventListener("pointermove", (event) => {
+  if (gameplayMapPanPointerId !== event.pointerId || !gameplayMapLastPanPoint) {
+    return;
+  }
+  gameplayMapRenderer.panByClientDelta(
+    event.clientX - gameplayMapLastPanPoint.x,
+    event.clientY - gameplayMapLastPanPoint.y,
+  );
+  gameplayMapLastPanPoint = { x: event.clientX, y: event.clientY };
+  gameplayMapRenderer.renderExplorer();
+  gameplayMapRenderer.svg.classList.add("tube-map-panning");
+});
+
+const endGameplayMapPan = (event: PointerEvent): void => {
+  if (gameplayMapPanPointerId !== event.pointerId) {
+    return;
+  }
+  if (gameplayMapRenderer.svg.hasPointerCapture(event.pointerId)) {
+    gameplayMapRenderer.svg.releasePointerCapture(event.pointerId);
+  }
+  gameplayMapPanPointerId = null;
+  gameplayMapLastPanPoint = null;
+  gameplayMapRenderer.svg.classList.remove("tube-map-panning");
+};
+gameplayMapRenderer.svg.addEventListener("pointerup", endGameplayMapPan);
+gameplayMapRenderer.svg.addEventListener("pointercancel", endGameplayMapPan);
 
 function startRun(seed: string, seedSource: RunState["seedSource"]): void {
   mapViewerActive = false;
@@ -250,16 +314,20 @@ function render(now = performance.now()): void {
     renderer.renderMenuPreview(now);
     hud.showResults(results);
   } else if (state && runState) {
-    renderer.render(
-      state,
-      pointerPoint,
-      mouseIntent.direction,
-      getActiveLineRevealAnimation(now),
-      getActiveStationWipeAnimation(now),
-      getActiveCameraPanAnimation(now),
-      completionCelebration !== null,
-      completionCelebration !== null && completionCelebration.startedAt !== null,
-    );
+    if (hud.isGameplayHelpOpen()) {
+      renderer.renderMenuPreview(now);
+    } else {
+      renderer.render(
+        state,
+        pointerPoint,
+        mouseIntent.direction,
+        getActiveLineRevealAnimation(now),
+        getActiveStationWipeAnimation(now),
+        getActiveCameraPanAnimation(now),
+        completionCelebration !== null,
+        completionCelebration !== null && completionCelebration.startedAt !== null,
+      );
+    }
     hud.update(state, now, runState, completionCelebration === null);
   } else if (countdown) {
     renderer.renderMenuPreview(now);
@@ -316,7 +384,9 @@ function tick(): void {
       hadLineRevealAnimation ||
       hadStationWipeAnimation ||
       hadCameraPanAnimation ||
-      nextCompletionCelebration.changed
+      nextCompletionCelebration.changed ||
+      hud.isGameplayHelpOpen() ||
+      renderer.svg.classList.contains("tube-map-menu-preview")
     ) {
       render(now);
     } else {
@@ -418,7 +488,7 @@ function getCameraPanAnimationProgress(now: number): number {
 }
 
 bindKeyboardControls((direction) => {
-  if (!state || hud.isGameplayHelpOpen()) {
+  if (!state || hud.isGameplayOverlayOpen()) {
     return;
   }
 
@@ -474,7 +544,7 @@ renderer.svg.addEventListener("pointerleave", () => {
 });
 
 function attemptMoveFromCurrentIntent(now: number): boolean {
-  if (!state || state.completed || hud.isGameplayHelpOpen()) {
+  if (!state || state.completed || hud.isGameplayOverlayOpen()) {
     return false;
   }
 
@@ -530,7 +600,7 @@ function tryHeldPointerMove(now: number, forceAttempt = false): void {
     heldMoveConsumed ||
     !state ||
     state.completed ||
-    hud.isGameplayHelpOpen()
+    hud.isGameplayOverlayOpen()
   ) {
     return;
   }
@@ -581,7 +651,7 @@ renderer.svg.addEventListener("pointerdown", (event) => {
 });
 
 function canPanAndZoom(): boolean {
-  return !hud.isGameplayHelpOpen() &&
+  return !hud.isGameplayOverlayOpen() &&
     (mapViewerActive || Boolean(state?.completed && completionCelebration === null));
 }
 

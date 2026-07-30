@@ -679,7 +679,8 @@ svg text {
 }
 
 .gameplay-exit-button,
-.gameplay-help-button {
+.gameplay-help-button,
+.gameplay-map-button {
   position: absolute;
   z-index: 21;
   top: 18px;
@@ -700,26 +701,123 @@ svg text {
 }
 
 .gameplay-help-button {
-  right: 18px;
+  right: 78px;
   padding-bottom: 2px;
   font-size: 28px;
   font-weight: 900;
   line-height: 1;
 }
 
+.gameplay-map-button {
+  right: 18px;
+}
+
 .gameplay-exit-button[hidden],
-.gameplay-help-button[hidden] {
+.gameplay-help-button[hidden],
+.gameplay-map-button[hidden] {
   display: none;
 }
 
-.gameplay-exit-button .button-icon {
+.gameplay-exit-button .button-icon,
+.gameplay-map-button .button-icon {
   width: 26px;
   height: 26px;
   fill: currentColor;
 }
 
 .gameplay-exit-button:active,
-.gameplay-help-button:active {
+.gameplay-help-button:active,
+.gameplay-map-button:active {
+  transform: translateY(4px);
+  box-shadow: none;
+}
+
+.gameplay-map-overlay {
+  position: absolute;
+  z-index: 45;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(247, 242, 229, 0.14);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.gameplay-map-overlay[hidden] {
+  display: none;
+}
+
+.gameplay-map-dialog {
+  position: relative;
+  width: min(1100px, 88vw);
+  height: min(720px, 78vh);
+  overflow: hidden;
+  border: 3px solid #111111;
+  border-radius: 12px;
+  background: #f7f2e5;
+  box-shadow:
+    0 7px 0 #111111,
+    0 24px 60px rgba(0, 0, 0, 0.28);
+}
+
+.gameplay-map-host {
+  position: absolute;
+  inset: 0;
+}
+
+.gameplay-map-host .tube-map {
+  background: #f7f2e5;
+}
+
+.gameplay-map-back {
+  position: absolute;
+  z-index: 46;
+  top: 18px;
+  left: 18px;
+  height: 46px;
+  border: 2px solid #111111;
+  border-radius: 8px;
+  padding: 0 16px;
+  background: #ffffff;
+  color: #111111;
+  font-size: 18px;
+  font-weight: 850;
+  box-shadow: 0 4px 0 #111111;
+}
+
+.gameplay-map-zoom {
+  position: absolute;
+  z-index: 2;
+  right: 14px;
+  bottom: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.gameplay-map-search-form {
+  z-index: 2;
+  width: min(520px, calc(100% - 150px));
+}
+
+.gameplay-map-zoom button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 2px solid #111111;
+  border-radius: 8px;
+  padding: 0;
+  background: #ffffff;
+  color: #111111;
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 4px 0 #111111;
+}
+
+.gameplay-map-back:active,
+.gameplay-map-zoom button:active {
   transform: translateY(4px);
   box-shadow: none;
 }
@@ -980,11 +1078,6 @@ svg text {
   display: none;
 }
 
-.gameplay-help-active .main-menu {
-  -webkit-backdrop-filter: blur(7px);
-  backdrop-filter: blur(7px);
-}
-
 .main-menu-content {
   position: absolute;
   top: 21%;
@@ -1057,7 +1150,7 @@ svg text {
 
 .main-menu[data-menu-mode="how-to-play"] .main-menu-content {
   top: 72px;
-  bottom: 24px;
+  bottom: 72px;
   grid-template-rows: minmax(0, 1fr);
   gap: 0;
   width: min(960px, calc(100vw - 48px));
@@ -1089,7 +1182,7 @@ svg text {
   border-radius: 12px;
   padding: 10px 24px 10px 12px;
   background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 4px 0 #111111, 0 14px 30px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 0 #111111;
 }
 
 .how-to-play-visual {
@@ -1595,7 +1688,7 @@ svg text {
 
   .main-menu[data-menu-mode="how-to-play"] .main-menu-content {
     top: 70px;
-    bottom: 12px;
+    bottom: 70px;
     width: calc(100vw - 24px);
   }
 
@@ -1695,6 +1788,15 @@ svg text {
 }
 
 @media (max-width: 520px) {
+  .gameplay-map-overlay {
+    padding: 16px;
+  }
+
+  .gameplay-map-dialog {
+    width: calc(100vw - 32px);
+    height: min(680px, calc(100vh - 64px));
+  }
+
   .main-menu-content {
     top: 26%;
     gap: 44px;
@@ -1707,6 +1809,7 @@ svg text {
 
   .main-menu[data-menu-mode="how-to-play"] .main-menu-content {
     top: 68px;
+    bottom: 68px;
   }
 
   .how-to-play-list {
