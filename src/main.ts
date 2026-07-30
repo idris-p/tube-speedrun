@@ -418,7 +418,7 @@ function getCameraPanAnimationProgress(now: number): number {
 }
 
 bindKeyboardControls((direction) => {
-  if (!state) {
+  if (!state || hud.isGameplayHelpOpen()) {
     return;
   }
 
@@ -474,7 +474,7 @@ renderer.svg.addEventListener("pointerleave", () => {
 });
 
 function attemptMoveFromCurrentIntent(now: number): boolean {
-  if (!state || state.completed) {
+  if (!state || state.completed || hud.isGameplayHelpOpen()) {
     return false;
   }
 
@@ -525,7 +525,13 @@ function attemptMoveFromCurrentIntent(now: number): boolean {
 }
 
 function tryHeldPointerMove(now: number, forceAttempt = false): void {
-  if (activeMovePointerId === null || heldMoveConsumed || !state || state.completed) {
+  if (
+    activeMovePointerId === null ||
+    heldMoveConsumed ||
+    !state ||
+    state.completed ||
+    hud.isGameplayHelpOpen()
+  ) {
     return;
   }
 
@@ -575,7 +581,8 @@ renderer.svg.addEventListener("pointerdown", (event) => {
 });
 
 function canPanAndZoom(): boolean {
-  return mapViewerActive || Boolean(state?.completed && completionCelebration === null);
+  return !hud.isGameplayHelpOpen() &&
+    (mapViewerActive || Boolean(state?.completed && completionCelebration === null));
 }
 
 function endPan(event: PointerEvent): void {

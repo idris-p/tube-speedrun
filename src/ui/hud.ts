@@ -70,6 +70,7 @@ export class Hud {
   private readonly completionQuitButton: HTMLButtonElement;
   private readonly dismissedRoundActionButton: HTMLButtonElement;
   private readonly gameplayExitButton: HTMLButtonElement;
+  private readonly gameplayHelpButton: HTMLButtonElement;
   private readonly exitConfirmOverlay: HTMLDivElement;
   private readonly resultsOverlay: HTMLDivElement;
   private readonly resultsSeedLabel: HTMLSpanElement;
@@ -98,6 +99,7 @@ export class Hud {
   private readonly network: NetworkData;
   private readonly callbacks: HudCallbacks;
   private menuMode: MenuMode = "home";
+  private gameplayHelpOpen = false;
   private completionDismissed = false;
   private renderedCompletionJourneyLegs: GameState["journeyLegs"] | null = null;
 
@@ -148,7 +150,13 @@ export class Hud {
     this.menuBackButton.type = "button";
     this.menuBackButton.className = "menu-back";
     this.menuBackButton.textContent = "\u2190 Back";
-    this.menuBackButton.addEventListener("click", () => this.setMenuMode(getPreviousMenuMode(this.menuMode)));
+    this.menuBackButton.addEventListener("click", () => {
+      if (this.gameplayHelpOpen) {
+        this.closeGameplayHelp();
+        return;
+      }
+      this.setMenuMode(getPreviousMenuMode(this.menuMode));
+    });
 
     this.menuContent = document.createElement("div");
     this.menuContent.className = "main-menu-content";
@@ -338,6 +346,14 @@ export class Hud {
     this.gameplayExitButton.addEventListener("click", () => {
       this.exitConfirmOverlay.hidden = false;
     });
+    this.gameplayHelpButton = document.createElement("button");
+    this.gameplayHelpButton.type = "button";
+    this.gameplayHelpButton.className = "gameplay-help-button";
+    this.gameplayHelpButton.textContent = "?";
+    this.gameplayHelpButton.ariaLabel = "How to Play";
+    this.gameplayHelpButton.title = "How to Play";
+    this.gameplayHelpButton.hidden = true;
+    this.gameplayHelpButton.addEventListener("click", () => this.openGameplayHelp());
     this.exitConfirmOverlay = document.createElement("div");
     this.exitConfirmOverlay.className = "exit-confirm-overlay";
     this.exitConfirmOverlay.hidden = true;
@@ -461,12 +477,14 @@ export class Hud {
       this.completionOverlay,
       this.exitConfirmOverlay,
       this.gameplayExitButton,
+      this.gameplayHelpButton,
       this.dismissedRoundActionButton,
       this.resultsOverlay,
     );
   }
 
   showMenu(): void {
+    this.resetGameplayHelp();
     this.shell.classList.remove("map-viewer-active");
     this.mapViewerControls.hidden = true;
     this.mapSearchInput.value = "";
@@ -480,6 +498,7 @@ export class Hud {
   }
 
   showSeedChoiceMenu(): void {
+    this.resetGameplayHelp();
     this.shell.classList.remove("map-viewer-active");
     this.mapViewerControls.hidden = true;
     this.completionDismissed = false;
@@ -490,6 +509,7 @@ export class Hud {
   }
 
   showResults(results: RunResults): void {
+    this.resetGameplayHelp();
     this.shell.classList.remove("map-viewer-active");
     this.mapViewerControls.hidden = true;
     this.shell.classList.remove("countdown-active");
@@ -501,6 +521,7 @@ export class Hud {
     this.menuOverlay.hidden = true;
     this.completionOverlay.hidden = true;
     this.gameplayExitButton.hidden = true;
+    this.gameplayHelpButton.hidden = true;
     this.countdownOverlay.hidden = true;
     this.exitConfirmOverlay.hidden = true;
     this.dismissedRoundActionButton.hidden = true;
@@ -542,6 +563,7 @@ export class Hud {
   }
 
   showCountdown(value: number): void {
+    this.resetGameplayHelp();
     this.shell.classList.remove("map-viewer-active");
     this.mapViewerControls.hidden = true;
     this.shell.classList.remove("menu-active");
@@ -553,6 +575,7 @@ export class Hud {
     this.menuOverlay.hidden = true;
     this.completionOverlay.hidden = true;
     this.gameplayExitButton.hidden = true;
+    this.gameplayHelpButton.hidden = true;
     this.countdownOverlay.hidden = false;
     this.countdownValue.textContent = String(value);
     this.exitConfirmOverlay.hidden = true;
@@ -570,6 +593,8 @@ export class Hud {
     this.shell.classList.remove("map-viewer-active");
     this.mapViewerControls.hidden = true;
     if (!state) {
+      this.gameplayHelpOpen = false;
+      this.shell.classList.remove("gameplay-help-active");
       this.shell.classList.remove("countdown-active");
       this.shell.classList.add("menu-active");
       this.statsPanel.hidden = true;
@@ -579,6 +604,7 @@ export class Hud {
       this.menuOverlay.hidden = false;
       this.completionOverlay.hidden = true;
       this.gameplayExitButton.hidden = true;
+      this.gameplayHelpButton.hidden = true;
       this.countdownOverlay.hidden = true;
       this.exitConfirmOverlay.hidden = true;
       this.resultsOverlay.hidden = true;
@@ -587,16 +613,21 @@ export class Hud {
       return;
     }
 
+    if (state.completed) {
+      this.gameplayHelpOpen = false;
+    }
     this.shell.classList.remove("countdown-active");
-    this.shell.classList.remove("menu-active");
+    this.shell.classList.toggle("menu-active", this.gameplayHelpOpen);
+    this.shell.classList.toggle("gameplay-help-active", this.gameplayHelpOpen);
     this.statsPanel.hidden = false;
     this.timerPanel.hidden = false;
     this.lineIndicator.hidden = false;
     this.temporaryBanner.hidden = !this.network.temporary;
-    this.menuOverlay.hidden = true;
+    this.menuOverlay.hidden = !this.gameplayHelpOpen;
     this.countdownOverlay.hidden = true;
     this.resultsOverlay.hidden = true;
-    this.gameplayExitButton.hidden = false;
+    this.gameplayExitButton.hidden = this.gameplayHelpOpen;
+    this.gameplayHelpButton.hidden = !shouldShowGameplayHelpButton(state.completed, this.gameplayHelpOpen);
 
     const startStation = getStation(this.network, state.startStationId);
     const destination = getStation(this.network, state.destinationStationId);
@@ -688,6 +719,7 @@ export class Hud {
   }
 
   showMapViewer(): void {
+    this.resetGameplayHelp();
     this.shell.classList.remove("menu-active", "countdown-active");
     this.shell.classList.add("map-viewer-active");
     this.statsPanel.hidden = true;
@@ -697,6 +729,7 @@ export class Hud {
     this.menuOverlay.hidden = true;
     this.completionOverlay.hidden = true;
     this.gameplayExitButton.hidden = true;
+    this.gameplayHelpButton.hidden = true;
     this.countdownOverlay.hidden = true;
     this.exitConfirmOverlay.hidden = true;
     this.dismissedRoundActionButton.hidden = true;
@@ -761,12 +794,31 @@ export class Hud {
   private setMenuMode(mode: MenuMode): void {
     this.menuMode = mode;
     this.menuOverlay.dataset.menuMode = mode;
+    const unsupportedDevice = shouldShowUnsupportedDeviceMessage(
+      mode,
+      window.matchMedia("(pointer: coarse)").matches,
+    );
+    this.menuOverlay.dataset.unsupportedDevice = String(unsupportedDevice);
+    this.menuActions.classList.toggle("main-menu-actions-device-message", unsupportedDevice);
     this.menuBackButton.hidden = mode === "home";
     this.menuTitle.hidden = mode === "how-to-play";
     this.menuTitle.textContent = "Rush Hour";
     this.menuActions.replaceChildren();
 
     if (mode === "home") {
+      if (unsupportedDevice) {
+        const message = document.createElement("p");
+        message.className = "main-menu-device-message";
+        const heading = document.createElement("span");
+        heading.className = "main-menu-device-message-heading";
+        heading.textContent = "Designed for desktop and laptop computers.";
+        const detail = document.createElement("span");
+        detail.className = "main-menu-device-message-detail";
+        detail.textContent = "Mobile and tablet devices are not supported.";
+        message.append(heading, detail);
+        this.menuActions.append(message);
+        return;
+      }
       this.menuActions.append(
         menuButton("Play", "primary", () => this.setMenuMode("seed-choice")),
         menuButton("How to Play", "secondary", () => this.setMenuMode("how-to-play")),
@@ -807,6 +859,33 @@ export class Hud {
     );
     this.menuActions.append(form);
     window.setTimeout(() => this.menuSeedInput.focus(), 0);
+  }
+
+  isGameplayHelpOpen(): boolean {
+    return this.gameplayHelpOpen;
+  }
+
+  private openGameplayHelp(): void {
+    this.gameplayHelpOpen = true;
+    this.setMenuMode("how-to-play");
+    this.shell.classList.add("menu-active", "gameplay-help-active");
+    this.menuOverlay.hidden = false;
+    this.gameplayExitButton.hidden = true;
+    this.gameplayHelpButton.hidden = true;
+  }
+
+  private closeGameplayHelp(): void {
+    this.gameplayHelpOpen = false;
+    this.shell.classList.remove("menu-active", "gameplay-help-active");
+    this.menuOverlay.hidden = true;
+    this.gameplayExitButton.hidden = false;
+    this.gameplayHelpButton.hidden = false;
+  }
+
+  private resetGameplayHelp(): void {
+    this.gameplayHelpOpen = false;
+    this.shell.classList.remove("gameplay-help-active");
+    this.gameplayHelpButton.hidden = true;
   }
 
   private renderLineIndicator(state: GameState): void {
@@ -1136,6 +1215,14 @@ export function formatMilliseconds(milliseconds: number): string {
 function renderMilliseconds(element: HTMLElement, milliseconds: number): void {
   const { minutes, seconds, centiseconds } = getTimeParts(milliseconds);
   renderTimeValue(element, { minutes, seconds, fraction: centiseconds });
+}
+
+export function shouldShowUnsupportedDeviceMessage(mode: MenuMode, pointerIsCoarse: boolean): boolean {
+  return mode === "home" && pointerIsCoarse;
+}
+
+export function shouldShowGameplayHelpButton(roundCompleted: boolean, helpOpen: boolean): boolean {
+  return !roundCompleted && !helpOpen;
 }
 
 function getTimeParts(milliseconds: number): { minutes: string; seconds: string; centiseconds: string } {

@@ -678,11 +678,11 @@ svg text {
   box-shadow: none;
 }
 
-.gameplay-exit-button {
+.gameplay-exit-button,
+.gameplay-help-button {
   position: absolute;
   z-index: 21;
   top: 18px;
-  left: 18px;
   display: grid;
   place-items: center;
   width: 48px;
@@ -695,7 +695,20 @@ svg text {
   box-shadow: 0 4px 0 #111111;
 }
 
-.gameplay-exit-button[hidden] {
+.gameplay-exit-button {
+  left: 18px;
+}
+
+.gameplay-help-button {
+  right: 18px;
+  padding-bottom: 2px;
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.gameplay-exit-button[hidden],
+.gameplay-help-button[hidden] {
   display: none;
 }
 
@@ -705,7 +718,8 @@ svg text {
   fill: currentColor;
 }
 
-.gameplay-exit-button:active {
+.gameplay-exit-button:active,
+.gameplay-help-button:active {
   transform: translateY(4px);
   box-shadow: none;
 }
@@ -966,6 +980,11 @@ svg text {
   display: none;
 }
 
+.gameplay-help-active .main-menu {
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+}
+
 .main-menu-content {
   position: absolute;
   top: 21%;
@@ -998,6 +1017,38 @@ svg text {
   display: grid;
   gap: 14px;
   width: min(300px, 100%);
+}
+
+.main-menu-actions-device-message {
+  width: min(540px, 100%);
+}
+
+.main-menu-device-message {
+  margin: 0;
+  border: 2px solid #111111;
+  border-radius: 8px;
+  padding: 20px 24px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #111111;
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+  box-shadow: 0 4px 0 #111111;
+}
+
+.main-menu-device-message-heading,
+.main-menu-device-message-detail {
+  display: block;
+}
+
+.main-menu-device-message-detail {
+  margin-top: 4px;
+  font-weight: 400;
+}
+
+.main-menu[data-unsupported-device="true"] .main-menu-social-links {
+  display: none;
 }
 
 .main-menu[data-menu-mode="how-to-play"] {
