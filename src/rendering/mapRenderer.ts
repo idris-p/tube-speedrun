@@ -1,4 +1,4 @@
-import { LINE_BY_ID, compareLineIds } from "../data/lines";
+import { compareLineIds } from "../data/lines";
 import type { GameState } from "../game/GameState";
 import {
   getConnectionFirstStepDirection,
@@ -10,7 +10,7 @@ import type { Connection, LineId, NetworkData, Point } from "../data/types";
 import { getSvgPoint } from "../input/mouse";
 import { GRID_CELL_SIZE, gridPointToSvgPoint } from "./grid";
 import { CorridorLayout, type StationMarkerGroup } from "./corridorLayout";
-import { STUB_STROKE_WIDTH } from "./lineStyles";
+import { renderDirectionStub } from "./directionStubRenderer";
 import { renderRevealedLine } from "./lineRenderer";
 import {
   getCanonicalPath,
@@ -26,6 +26,9 @@ import {
   renderStationMarker,
   type StationMarkerRenderOptions,
 } from "./stationRenderer";
+import { createCursorArrow } from "./pointerRenderer";
+
+export { getStubArrowHeadPoints } from "./directionStubRenderer";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const BASE_VIEWBOX_WIDTH = 760;
@@ -33,10 +36,6 @@ const BASE_VIEWBOX_HEIGHT = 560;
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 2.4;
 const ZOOM_STEP = 1.25;
-const STUB_LENGTH = 40;
-const STUB_ARROW_LENGTH = 11;
-const STUB_ARROW_HALF_WIDTH = STUB_STROKE_WIDTH / 2;
-const STUB_ARROW_OVERLAP = 0.2;
 const MAP_PAN_PADDING = GRID_CELL_SIZE * 3;
 const MENU_PREVIEW_SECONDS_PER_ORBIT = 360;
 const MENU_PREVIEW_ORBIT_RADIUS_X = 360;
@@ -560,20 +559,11 @@ export class MapRenderer {
     }
 
     const svgPoint = getSvgPoint(this.svg, pointerPoint.x, pointerPoint.y);
-    const arrow = document.createElementNS(SVG_NS, "g");
+    const arrow = createCursorArrow(rejected);
     arrow.setAttribute(
       "transform",
       `translate(${svgPoint.x} ${svgPoint.y}) scale(${1 / this.zoom}) rotate(${getDirectionAngle(pointerDirection)})`,
     );
-    arrow.setAttribute("class", rejected ? "cursor-arrow cursor-arrow-rejected" : "cursor-arrow");
-
-    const shape = document.createElementNS(SVG_NS, "path");
-    shape.setAttribute(
-      "d",
-      "M -15 -3 L 4 -3 L 4 -9 L 17 0 L 4 9 L 4 3 L -15 3 Z",
-    );
-    shape.setAttribute("class", "cursor-arrow-shape");
-    arrow.append(shape);
     layer.append(arrow);
   }
 
@@ -736,45 +726,14 @@ export class MapRenderer {
     );
 
     for (const { stub, offset } of renderItems) {
-      const start = {
-        x: stub.start.x + stub.normal.x * offset,
-        y: stub.start.y + stub.normal.y * offset,
-      };
-      const arrowTip = {
-        x: stub.start.x + stub.unit.x * STUB_LENGTH + stub.normal.x * offset,
-        y: stub.start.y + stub.unit.y * STUB_LENGTH + stub.normal.y * offset,
-      };
-      const lineEnd = showArrowHeads
-        ? {
-            x: arrowTip.x - stub.unit.x * (STUB_ARROW_LENGTH - STUB_ARROW_OVERLAP),
-            y: arrowTip.y - stub.unit.y * (STUB_ARROW_LENGTH - STUB_ARROW_OVERLAP),
-          }
-        : arrowTip;
-      const line = document.createElementNS(SVG_NS, "line");
-      line.setAttribute("x1", String(start.x));
-      line.setAttribute("y1", String(start.y));
-      line.setAttribute("x2", String(lineEnd.x));
-      line.setAttribute("y2", String(lineEnd.y));
-      line.setAttribute("stroke", LINE_BY_ID[stub.connection.line].color);
-      line.setAttribute("stroke-width", String(STUB_STROKE_WIDTH));
-      line.setAttribute("class", "direction-stub");
-      if (stub.connection.line === "walk") {
-        line.setAttribute("stroke-dasharray", "8 6");
-      }
-      layer.append(line);
-
-      if (showArrowHeads) {
-        const arrow = document.createElementNS(SVG_NS, "polygon");
-        arrow.setAttribute(
-          "points",
-          getStubArrowHeadPoints(arrowTip, stub.unit, stub.normal)
-            .map((point) => `${point.x},${point.y}`)
-            .join(" "),
-        );
-        arrow.setAttribute("fill", LINE_BY_ID[stub.connection.line].color);
-        arrow.setAttribute("class", "direction-stub-arrow");
-        layer.append(arrow);
-      }
+      renderDirectionStub(layer, {
+        lineId: stub.connection.line,
+        start: stub.start,
+        unit: stub.unit,
+        normal: stub.normal,
+        offset,
+        showArrowHead: showArrowHeads,
+      });
     }
   }
 
@@ -810,24 +769,6 @@ export function getSelectedStationMarkerPoint(
   fallback: Point,
 ): Point {
   return markerGroups.find((group) => group.lines.includes(selectedLineId))?.point ?? fallback;
-}
-
-export function getStubArrowHeadPoints(end: Point, unit: Point, normal: Point): Point[] {
-  const base = {
-    x: end.x - unit.x * STUB_ARROW_LENGTH,
-    y: end.y - unit.y * STUB_ARROW_LENGTH,
-  };
-  return [
-    end,
-    {
-      x: base.x + normal.x * STUB_ARROW_HALF_WIDTH,
-      y: base.y + normal.y * STUB_ARROW_HALF_WIDTH,
-    },
-    {
-      x: base.x - normal.x * STUB_ARROW_HALF_WIDTH,
-      y: base.y - normal.y * STUB_ARROW_HALF_WIDTH,
-    },
-  ];
 }
 
 function subtractPoints(first: Point, second: Point): Point {

@@ -1,6 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { networkData } from "../data/network";
-import { createMapSearchEntries, filterMapSearchEntries, findMapSearchStationId } from "./hud";
+import {
+  createMapSearchEntries,
+  filterMapSearchEntries,
+  findMapSearchStationId,
+  getPreviousMenuMode,
+} from "./hud";
+
+describe("main menu navigation", () => {
+  it("returns from How to Play to the main menu", () => {
+    expect(getPreviousMenuMode("how-to-play")).toBe("home");
+  });
+
+  it("keeps the nested seed entry back path intact", () => {
+    expect(getPreviousMenuMode("seed-entry")).toBe("seed-choice");
+    expect(getPreviousMenuMode("seed-choice")).toBe("home");
+  });
+});
 
 describe("map station search", () => {
   const entries = createMapSearchEntries(networkData);

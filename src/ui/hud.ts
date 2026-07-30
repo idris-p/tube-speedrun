@@ -13,6 +13,8 @@ import {
   createBarMarker,
   createInterchangeMarker,
 } from "../rendering/stationRenderer";
+import { createHowToPlayContent } from "./howToPlay";
+import { createHudMetric, renderTimeValue } from "./hudMetric";
 
 export type HudCallbacks = {
   onStartRandomSeed: () => void;
@@ -26,7 +28,7 @@ export type HudCallbacks = {
   onZoomOut: () => void;
 };
 
-type MenuMode = "home" | "seed-choice" | "seed-entry";
+export type MenuMode = "home" | "how-to-play" | "seed-choice" | "seed-entry";
 type SocialLinkId = "github" | "reddit" | "x";
 type MapSearchEntry = { label: string; stationId: string };
 
@@ -83,6 +85,8 @@ export class Hud {
   private readonly temporaryBanner: HTMLDivElement;
   private readonly menuOverlay: HTMLDivElement;
   private readonly menuBackButton: HTMLButtonElement;
+  private readonly menuContent: HTMLDivElement;
+  private readonly menuTitle: HTMLHeadingElement;
   private readonly menuActions: HTMLDivElement;
   private readonly menuSeedInput: HTMLInputElement;
   private readonly mapViewerControls: HTMLDivElement;
@@ -117,14 +121,14 @@ export class Hud {
     this.stationValue = document.createElement("span");
     this.destinationValue = document.createElement("span");
     this.timerPanel.append(
-      metric("Time", this.timerValue),
-      metric("Changes", this.changeValue),
-      metric("Moves", this.moveValue),
+      createHudMetric("Time", this.timerValue),
+      createHudMetric("Changes", this.changeValue),
+      createHudMetric("Moves", this.moveValue),
     );
     this.statsPanel.append(
-      metric("Round", this.roundValue),
-      metric("Start", this.stationValue),
-      metric("Target", this.destinationValue),
+      createHudMetric("Round", this.roundValue),
+      createHudMetric("Start", this.stationValue),
+      createHudMetric("Target", this.destinationValue),
     );
 
     this.lineIndicator = document.createElement("div");
@@ -146,10 +150,10 @@ export class Hud {
     this.menuBackButton.textContent = "\u2190 Back";
     this.menuBackButton.addEventListener("click", () => this.setMenuMode(getPreviousMenuMode(this.menuMode)));
 
-    const menuContent = document.createElement("div");
-    menuContent.className = "main-menu-content";
-    const menuTitle = document.createElement("h1");
-    menuTitle.textContent = "Rush Hour";
+    this.menuContent = document.createElement("div");
+    this.menuContent.className = "main-menu-content";
+    this.menuTitle = document.createElement("h1");
+    this.menuTitle.textContent = "Rush Hour";
     this.menuActions = document.createElement("div");
     this.menuActions.className = "main-menu-actions";
     const socialLinks = createSocialLinks();
@@ -163,8 +167,8 @@ export class Hud {
     this.menuSeedInput.placeholder = "Enter seed";
     this.menuSeedInput.ariaLabel = "Seed";
 
-    menuContent.append(menuTitle, this.menuActions);
-    this.menuOverlay.append(this.menuBackButton, menuContent, socialLinks);
+    this.menuContent.append(this.menuTitle, this.menuActions);
+    this.menuOverlay.append(this.menuBackButton, this.menuContent, socialLinks);
     this.setMenuMode("home");
 
     this.mapViewerControls = document.createElement("div");
@@ -758,13 +762,21 @@ export class Hud {
     this.menuMode = mode;
     this.menuOverlay.dataset.menuMode = mode;
     this.menuBackButton.hidden = mode === "home";
+    this.menuTitle.hidden = mode === "how-to-play";
+    this.menuTitle.textContent = "Rush Hour";
     this.menuActions.replaceChildren();
 
     if (mode === "home") {
       this.menuActions.append(
         menuButton("Play", "primary", () => this.setMenuMode("seed-choice")),
+        menuButton("How to Play", "secondary", () => this.setMenuMode("how-to-play")),
         menuButton("Map", "secondary", this.callbacks.onOpenMap),
       );
+      return;
+    }
+
+    if (mode === "how-to-play") {
+      this.menuActions.append(createHowToPlayContent());
       return;
     }
 
@@ -913,7 +925,7 @@ function normalizeStationSearch(value: string): string {
     .replace(/\s+/g, " ");
 }
 
-function getPreviousMenuMode(mode: MenuMode): MenuMode {
+export function getPreviousMenuMode(mode: MenuMode): MenuMode {
   if (mode === "seed-entry") {
     return "seed-choice";
   }
@@ -1062,19 +1074,6 @@ function lineChip(label: string, lineId: keyof typeof LINE_BY_ID, variant: "prev
   return chip;
 }
 
-function metric(label: string, valueElement: HTMLSpanElement): HTMLDivElement {
-  const wrapper = document.createElement("div");
-  wrapper.className = "metric";
-
-  const labelElement = document.createElement("span");
-  labelElement.className = "metric-label";
-  labelElement.textContent = label;
-
-  valueElement.className = "metric-value";
-  wrapper.append(labelElement, valueElement);
-  return wrapper;
-}
-
 function completionStat(label: string, valueElement: HTMLSpanElement): HTMLDivElement {
   const wrapper = document.createElement("div");
   wrapper.className = "completion-stat";
@@ -1136,21 +1135,7 @@ export function formatMilliseconds(milliseconds: number): string {
 
 function renderMilliseconds(element: HTMLElement, milliseconds: number): void {
   const { minutes, seconds, centiseconds } = getTimeParts(milliseconds);
-  element.classList.add("time-value");
-  element.replaceChildren(
-    timePart(minutes, "time-minutes"),
-    timePart(":", "time-separator"),
-    timePart(seconds, "time-seconds"),
-    timePart(".", "time-separator"),
-    timePart(centiseconds, "time-centiseconds"),
-  );
-}
-
-function timePart(text: string, className: string): HTMLSpanElement {
-  const element = document.createElement("span");
-  element.className = className;
-  element.textContent = text;
-  return element;
+  renderTimeValue(element, { minutes, seconds, fraction: centiseconds });
 }
 
 function getTimeParts(milliseconds: number): { minutes: string; seconds: string; centiseconds: string } {

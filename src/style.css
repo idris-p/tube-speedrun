@@ -1000,6 +1000,179 @@ svg text {
   width: min(300px, 100%);
 }
 
+.main-menu[data-menu-mode="how-to-play"] {
+  padding: 18px 24px 24px;
+}
+
+.main-menu[data-menu-mode="how-to-play"] .main-menu-content {
+  top: 72px;
+  bottom: 24px;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
+  width: min(960px, calc(100vw - 48px));
+}
+
+.main-menu[data-menu-mode="how-to-play"] .main-menu-actions {
+  width: 100%;
+  min-height: 0;
+}
+
+.how-to-play-list {
+  --tutorial-line-cycle-duration: 6s;
+  --tutorial-direction-cycle-duration: 16s;
+  display: grid;
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 6px 6px;
+}
+
+.how-to-play-instruction {
+  display: grid;
+  grid-template-columns: 246px minmax(0, 1fr);
+  gap: 24px;
+  align-items: center;
+  min-height: 0;
+  border: 2px solid #111111;
+  border-radius: 12px;
+  padding: 10px 24px 10px 12px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 4px 0 #111111, 0 14px 30px rgba(0, 0, 0, 0.1);
+}
+
+.how-to-play-visual {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 120px;
+  overflow: visible;
+}
+
+.how-to-play-svg {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: visible;
+}
+
+.tutorial-pointer {
+  width: 112px;
+  height: 112px;
+}
+
+.tutorial-station-markers {
+  width: 228px;
+  height: 120px;
+}
+
+.tutorial-line-selection {
+  width: 120px;
+  height: 120px;
+}
+
+.tutorial-pointer-arrow {
+  transform-origin: 0 0;
+  animation: tutorial-pointer-directions var(--tutorial-direction-cycle-duration) step-end infinite;
+}
+
+@keyframes tutorial-pointer-directions {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  12.5% {
+    transform: rotate(45deg);
+  }
+
+  25% {
+    transform: rotate(90deg);
+  }
+
+  37.5% {
+    transform: rotate(135deg);
+  }
+
+  50% {
+    transform: rotate(180deg);
+  }
+
+  62.5% {
+    transform: rotate(225deg);
+  }
+
+  75% {
+    transform: rotate(270deg);
+  }
+
+  87.5% {
+    transform: rotate(315deg);
+  }
+
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+.tutorial-line-selection .current-station-highlight {
+  animation: tutorial-line-cycle var(--tutorial-line-cycle-duration) step-end infinite;
+}
+
+@keyframes tutorial-line-cycle {
+  0%,
+  100% {
+    stroke: #e32017;
+  }
+
+  33.333% {
+    stroke: #0098d4;
+  }
+
+  66.667% {
+    stroke: #00782a;
+  }
+}
+
+.how-to-play-copy {
+  min-width: 0;
+}
+
+.how-to-play-copy h2 {
+  margin: 0 0 10px;
+  color: #111111;
+  font-size: 23px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.how-to-play-copy p {
+  margin: 0;
+  color: #252525;
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+.tutorial-gameplay-timer {
+  position: relative;
+  right: auto;
+  bottom: auto;
+  grid-template-columns: minmax(0, 1fr);
+  width: 174px;
+  min-height: var(--gameplay-hud-height);
+  padding: 12px 14px;
+  text-align: right;
+  box-shadow: none;
+}
+
+.tutorial-gameplay-timer .time-value {
+  grid-template-columns: minmax(2ch, auto) 0.35ch 2ch 0.35ch 3ch;
+}
+
+.tutorial-gameplay-timer:hover {
+  opacity: 1;
+}
+
 .main-menu-social-links {
   position: absolute;
   right: 24px;
@@ -1364,6 +1537,43 @@ svg text {
     -webkit-text-stroke-width: 4px;
   }
 
+  .main-menu[data-menu-mode="how-to-play"] {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .main-menu[data-menu-mode="how-to-play"] .main-menu-content {
+    top: 70px;
+    bottom: 12px;
+    width: calc(100vw - 24px);
+  }
+
+  .how-to-play-instruction {
+    grid-template-columns: 188px minmax(0, 1fr);
+    gap: 14px;
+    padding: 8px 14px 8px 8px;
+  }
+
+  .how-to-play-visual {
+    height: 110px;
+  }
+
+  .how-to-play-copy h2 {
+    font-size: 20px;
+  }
+
+  .how-to-play-copy p {
+    font-size: 15px;
+  }
+
+  .tutorial-gameplay-timer {
+    width: 174px;
+  }
+
+  .tutorial-gameplay-timer .metric-value {
+    font-size: 24px;
+  }
+
   .main-menu-social-links {
     right: 18px;
     bottom: 18px;
@@ -1444,6 +1654,47 @@ svg text {
     -webkit-text-stroke-width: 3px;
   }
 
+  .main-menu[data-menu-mode="how-to-play"] .main-menu-content {
+    top: 68px;
+  }
+
+  .how-to-play-list {
+    gap: 10px;
+    padding-right: 3px;
+    padding-left: 3px;
+  }
+
+  .how-to-play-instruction {
+    grid-template-columns: 132px minmax(0, 1fr);
+    gap: 8px;
+    border-radius: 9px;
+    padding: 7px 9px 7px 4px;
+  }
+
+  .how-to-play-visual {
+    height: 104px;
+  }
+
+  .how-to-play-copy h2 {
+    margin-bottom: 7px;
+    font-size: 17px;
+  }
+
+  .how-to-play-copy p {
+    font-size: 12.5px;
+    line-height: 1.25;
+  }
+
+  .tutorial-gameplay-timer {
+    width: 126px;
+    min-height: 62px;
+    padding: 9px 8px;
+  }
+
+  .tutorial-gameplay-timer .metric-value {
+    font-size: 18px;
+  }
+
   .main-menu-button {
     height: 52px;
     font-size: 20px;
@@ -1477,5 +1728,12 @@ svg text {
   .seed-controls button {
     min-width: 0;
     padding: 0 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tutorial-pointer-arrow,
+  .tutorial-line-selection .current-station-highlight {
+    animation: none;
   }
 }
