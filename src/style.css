@@ -1158,38 +1158,107 @@ svg text {
 
 .main-menu[data-menu-mode="how-to-play"] .main-menu-actions {
   width: 100%;
+  height: 100%;
   min-height: 0;
 }
 
-.how-to-play-list {
+.how-to-play-carousel {
   --tutorial-line-cycle-duration: 6s;
   --tutorial-direction-cycle-duration: 16s;
   display: grid;
-  grid-template-rows: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: 58px minmax(0, 1fr) 58px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 18px 16px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.how-to-play-viewport {
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
-  padding: 0 6px 6px;
+  padding: 0 0 5px;
+}
+
+.how-to-play-list {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  transition: transform 260ms ease;
 }
 
 .how-to-play-instruction {
+  flex: 0 0 100%;
   display: grid;
-  grid-template-columns: 246px minmax(0, 1fr);
-  gap: 24px;
+  grid-template-rows: auto auto;
+  gap: 10px;
+  align-content: center;
   align-items: center;
+  width: 100%;
+  height: 100%;
   min-height: 0;
   border: 2px solid #111111;
   border-radius: 12px;
-  padding: 10px 24px 10px 12px;
+  padding: 34px 46px;
   background: rgba(255, 255, 255, 0.95);
   box-shadow: 0 4px 0 #111111;
+}
+
+.how-to-play-arrow {
+  align-self: center;
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border: 2px solid #111111;
+  border-radius: 8px;
+  padding: 0 0 3px;
+  background: #ffffff;
+  color: #111111;
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 4px 0 #111111;
+}
+
+.how-to-play-arrow:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: none;
+}
+
+.how-to-play-arrow:disabled {
+  opacity: 0.35;
+}
+
+.how-to-play-dots {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  align-items: center;
+  min-height: 18px;
+}
+
+.how-to-play-dot {
+  width: 13px;
+  height: 13px;
+  border: 2px solid #111111;
+  border-radius: 50%;
+  padding: 0;
+  background: #ffffff;
+}
+
+.how-to-play-dot-active {
+  background: #111111;
 }
 
 .how-to-play-visual {
   display: grid;
   place-items: center;
   width: 100%;
-  height: 120px;
+  height: min(250px, 42vh);
   overflow: visible;
 }
 
@@ -1201,18 +1270,18 @@ svg text {
 }
 
 .tutorial-pointer {
-  width: 112px;
-  height: 112px;
+  width: 210px;
+  height: 210px;
 }
 
 .tutorial-station-markers {
-  width: 228px;
-  height: 120px;
+  width: 390px;
+  height: 220px;
 }
 
 .tutorial-line-selection {
-  width: 120px;
-  height: 120px;
+  width: 220px;
+  height: 220px;
 }
 
 .tutorial-pointer-arrow {
@@ -1278,13 +1347,16 @@ svg text {
 }
 
 .how-to-play-copy {
+  justify-self: center;
+  width: min(660px, 100%);
   min-width: 0;
+  text-align: left;
 }
 
 .how-to-play-copy h2 {
   margin: 0 0 10px;
   color: #111111;
-  font-size: 23px;
+  font-size: 32px;
   font-weight: 900;
   line-height: 1;
 }
@@ -1292,7 +1364,7 @@ svg text {
 .how-to-play-copy p {
   margin: 0;
   color: #252525;
-  font-size: 17px;
+  font-size: 21px;
   font-weight: 400;
   line-height: 1.3;
 }
@@ -1301,16 +1373,8 @@ svg text {
   position: relative;
   right: auto;
   bottom: auto;
-  grid-template-columns: minmax(0, 1fr);
-  width: 174px;
-  min-height: var(--gameplay-hud-height);
-  padding: 12px 14px;
-  text-align: right;
-  box-shadow: none;
-}
-
-.tutorial-gameplay-timer .time-value {
-  grid-template-columns: minmax(2ch, auto) 0.35ch 2ch 0.35ch 3ch;
+  transform: scale(1.25);
+  transform-origin: center;
 }
 
 .tutorial-gameplay-timer:hover {
@@ -1692,14 +1756,24 @@ svg text {
     width: calc(100vw - 24px);
   }
 
+  .how-to-play-carousel {
+    grid-template-columns: 50px minmax(0, 1fr) 50px;
+    column-gap: 12px;
+  }
+
+  .how-to-play-arrow {
+    width: 50px;
+    height: 50px;
+  }
+
   .how-to-play-instruction {
-    grid-template-columns: 188px minmax(0, 1fr);
-    gap: 14px;
-    padding: 8px 14px 8px 8px;
+    grid-template-rows: auto auto;
+    gap: 8px;
+    padding: 24px 28px;
   }
 
   .how-to-play-visual {
-    height: 110px;
+    height: min(250px, 44vh);
   }
 
   .how-to-play-copy h2 {
@@ -1711,11 +1785,7 @@ svg text {
   }
 
   .tutorial-gameplay-timer {
-    width: 174px;
-  }
-
-  .tutorial-gameplay-timer .metric-value {
-    font-size: 24px;
+    transform: scale(0.72);
   }
 
   .main-menu-social-links {
@@ -1812,21 +1882,26 @@ svg text {
     bottom: 68px;
   }
 
-  .how-to-play-list {
-    gap: 10px;
-    padding-right: 3px;
-    padding-left: 3px;
+  .how-to-play-carousel {
+    grid-template-columns: 42px minmax(0, 1fr) 42px;
+    gap: 12px 8px;
+  }
+
+  .how-to-play-arrow {
+    width: 42px;
+    height: 42px;
+    font-size: 24px;
   }
 
   .how-to-play-instruction {
-    grid-template-columns: 132px minmax(0, 1fr);
-    gap: 8px;
+    grid-template-rows: auto auto;
+    gap: 6px;
     border-radius: 9px;
-    padding: 7px 9px 7px 4px;
+    padding: 16px 12px;
   }
 
   .how-to-play-visual {
-    height: 104px;
+    height: min(190px, 38vh);
   }
 
   .how-to-play-copy h2 {
@@ -1840,13 +1915,7 @@ svg text {
   }
 
   .tutorial-gameplay-timer {
-    width: 126px;
-    min-height: 62px;
-    padding: 9px 8px;
-  }
-
-  .tutorial-gameplay-timer .metric-value {
-    font-size: 18px;
+    transform: scale(0.62);
   }
 
   .main-menu-button {
@@ -1889,5 +1958,9 @@ svg text {
   .tutorial-pointer-arrow,
   .tutorial-line-selection .current-station-highlight {
     animation: none;
+  }
+
+  .how-to-play-list {
+    transition: none;
   }
 }

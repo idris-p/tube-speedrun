@@ -161,7 +161,7 @@ export class Hud {
     this.menuBackButton = document.createElement("button");
     this.menuBackButton.type = "button";
     this.menuBackButton.className = "menu-back";
-    this.menuBackButton.textContent = "\u2190 Back";
+    this.menuBackButton.textContent = "\u25c0 Back";
     this.menuBackButton.addEventListener("click", () => {
       if (this.gameplayHelpOpen) {
         this.closeGameplayHelp();
@@ -197,7 +197,7 @@ export class Hud {
     const mapViewerBack = document.createElement("button");
     mapViewerBack.type = "button";
     mapViewerBack.className = "map-viewer-back";
-    mapViewerBack.textContent = "\u2190 Menu";
+    mapViewerBack.textContent = "\u25c0 Menu";
     mapViewerBack.addEventListener("click", callbacks.onReturnToMenu);
     const mapSearchForm = document.createElement("form");
     mapSearchForm.className = "map-search-form";
@@ -393,7 +393,7 @@ export class Hud {
     const gameplayMapBack = document.createElement("button");
     gameplayMapBack.type = "button";
     gameplayMapBack.className = "gameplay-map-back";
-    gameplayMapBack.textContent = "\u2190 Back";
+    gameplayMapBack.textContent = "\u25c0 Back";
     gameplayMapBack.addEventListener("click", () => this.closeGameplayMap());
     const gameplayMapZoom = document.createElement("div");
     gameplayMapZoom.className = "gameplay-map-zoom";

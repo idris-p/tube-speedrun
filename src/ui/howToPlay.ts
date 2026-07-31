@@ -9,19 +9,23 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const DIAGONAL_COMPONENT = Math.SQRT1_2;
 
 export function createHowToPlayContent(): HTMLElement {
-  const list = document.createElement("section");
+  const carousel = document.createElement("section");
+  carousel.className = "how-to-play-carousel";
+  carousel.ariaLabel = "How to play instructions";
+  carousel.setAttribute("aria-roledescription", "carousel");
+
+  const list = document.createElement("div");
   list.className = "how-to-play-list";
-  list.ariaLabel = "How to play instructions";
-  list.append(
-    instruction(
-      "Moving",
-      createPointerIllustration(),
-      "Point the arrow where you want to go using your mouse, then left-click to travel if the move is valid.",
-    ),
+  const cards = [
     instruction(
       "Station markers",
       createStationMarkerIllustration(),
-      "Interchange stations let you switch between tube lines. Use the coloured direction hint stubs to see which directions you can travel before moving.",
+      "Use the coloured direction hint stubs to see which directions you can travel before moving. Interchange stations let you switch between tube lines.",
+    ),
+    instruction(
+      "Moving",
+      createPointerIllustration(),
+      "The arrow follows the direction of your mouse movement. Left-click to move in the direction it's pointing if the move is valid.",
     ),
     instruction(
       "Changing lines",
@@ -33,8 +37,78 @@ export function createHowToPlayContent(): HTMLElement {
       createTimerIllustration(),
       "Complete all 5 rounds as quickly as possible while minimising unnecessary moves and line changes.",
     ),
-  );
-  return list;
+  ];
+  list.append(...cards);
+
+  const viewport = document.createElement("div");
+  viewport.className = "how-to-play-viewport";
+  viewport.append(list);
+
+  const previousButton = carouselButton("\u25c0", "Previous instruction");
+  previousButton.classList.add("how-to-play-previous");
+  const nextButton = carouselButton("\u25b6", "Next instruction");
+  nextButton.classList.add("how-to-play-next");
+
+  const dots = document.createElement("div");
+  dots.className = "how-to-play-dots";
+  dots.setAttribute("role", "group");
+  dots.ariaLabel = "Choose an instruction";
+  const dotButtons = cards.map((card, index) => {
+    const dot = document.createElement("button");
+    dot.type = "button";
+    dot.className = "how-to-play-dot";
+    dot.ariaLabel = `Show instruction ${index + 1}: ${card.querySelector("h2")?.textContent ?? ""}`;
+    dots.append(dot);
+    return dot;
+  });
+
+  let activeIndex = 0;
+  const showCard = (index: number): void => {
+    activeIndex = Math.max(0, Math.min(index, cards.length - 1));
+    list.style.transform = `translateX(-${activeIndex * 100}%)`;
+    cards.forEach((card, cardIndex) => {
+      const active = cardIndex === activeIndex;
+      card.setAttribute("aria-hidden", String(!active));
+      card.toggleAttribute("inert", !active);
+    });
+    dotButtons.forEach((dot, dotIndex) => {
+      const active = dotIndex === activeIndex;
+      dot.classList.toggle("how-to-play-dot-active", active);
+      if (active) {
+        dot.setAttribute("aria-current", "step");
+      } else {
+        dot.removeAttribute("aria-current");
+      }
+    });
+    previousButton.disabled = activeIndex === 0;
+    nextButton.disabled = activeIndex === cards.length - 1;
+  };
+
+  previousButton.addEventListener("click", () => showCard(activeIndex - 1));
+  nextButton.addEventListener("click", () => showCard(activeIndex + 1));
+  dotButtons.forEach((dot, index) => dot.addEventListener("click", () => showCard(index)));
+  carousel.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      showCard(activeIndex - 1);
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      showCard(activeIndex + 1);
+    }
+  });
+
+  carousel.append(previousButton, viewport, nextButton, dots);
+  showCard(0);
+  return carousel;
+}
+
+function carouselButton(label: string, ariaLabel: string): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "how-to-play-arrow";
+  button.textContent = label;
+  button.ariaLabel = ariaLabel;
+  return button;
 }
 
 function instruction(title: string, illustration: Element, caption: string): HTMLElement {
@@ -70,7 +144,7 @@ function createStationMarkerIllustration(): SVGSVGElement {
   const nonInterchange = tutorialStation(
     "tutorial-non-interchange",
     "Non-interchange",
-    0,
+    -0.5,
     0,
     ["central"],
     -30,
@@ -78,7 +152,7 @@ function createStationMarkerIllustration(): SVGSVGElement {
   const interchange = tutorialStation(
     "tutorial-interchange",
     "Interchange",
-    4.5,
+    5,
     0,
     ["central", "victoria"],
   );
@@ -168,9 +242,17 @@ function createLineSelectionIllustration(): SVGSVGElement {
 function createTimerIllustration(): HTMLDivElement {
   const timer = document.createElement("div");
   timer.className = "hud-panel hud-timer tutorial-gameplay-timer";
-  const value = document.createElement("span");
-  timer.append(createHudMetric("Time", value));
-  renderTimeValue(value, { minutes: "00", seconds: "13", fraction: "946" });
+  const timeValue = document.createElement("span");
+  const changeValue = document.createElement("span");
+  const moveValue = document.createElement("span");
+  changeValue.textContent = "1";
+  moveValue.textContent = "12";
+  timer.append(
+    createHudMetric("Time", timeValue),
+    createHudMetric("Changes", changeValue),
+    createHudMetric("Moves", moveValue),
+  );
+  renderTimeValue(timeValue, { minutes: "00", seconds: "13", fraction: "94" });
   return timer;
 }
 
