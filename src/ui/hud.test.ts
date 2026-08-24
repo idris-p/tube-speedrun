@@ -6,7 +6,6 @@ import {
   findMapSearchStationId,
   getPreviousMenuMode,
   shouldShowGameplayHelpButton,
-  shouldShowUnsupportedDeviceMessage,
 } from "./hud";
 
 describe("main menu navigation", () => {
@@ -17,12 +16,6 @@ describe("main menu navigation", () => {
   it("keeps the nested seed entry back path intact", () => {
     expect(getPreviousMenuMode("seed-entry")).toBe("seed-choice");
     expect(getPreviousMenuMode("seed-choice")).toBe("home");
-  });
-
-  it("replaces only the coarse-pointer home menu with the unsupported-device message", () => {
-    expect(shouldShowUnsupportedDeviceMessage("home", true)).toBe(true);
-    expect(shouldShowUnsupportedDeviceMessage("home", false)).toBe(false);
-    expect(shouldShowUnsupportedDeviceMessage("how-to-play", true)).toBe(false);
   });
 
   it("shows gameplay help only while an unfinished round is active and the tutorial is closed", () => {

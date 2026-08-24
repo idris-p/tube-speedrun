@@ -6,16 +6,16 @@ import type { StationMarkerGroup } from "./corridorLayout";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 export const INTERCHANGE_OUTLINE_WIDTH = 12;
-const INTERCHANGE_OUTER_RADIUS = GRID_CELL_SIZE / 2;
+export const INTERCHANGE_OUTER_RADIUS = GRID_CELL_SIZE / 2;
 const INTERCHANGE_RADIUS = INTERCHANGE_OUTER_RADIUS - INTERCHANGE_OUTLINE_WIDTH / 2;
 export const STATION_BAR_MARKER_LENGTH = GRID_CELL_SIZE;
 const BAR_HALF_LENGTH = STATION_BAR_MARKER_LENGTH / 2 - 3;
-const BAR_WIDTH = 5;
+export const STATION_BAR_WIDTH = 5;
 const CURRENT_HIGHLIGHT_WIDTH = 4;
 const CURRENT_HIGHLIGHT_RADIUS =
   INTERCHANGE_OUTER_RADIUS + CURRENT_HIGHLIGHT_WIDTH / 2;
 const CONJOINED_NECK_WIDTH = INTERCHANGE_OUTLINE_WIDTH;
-const CONJOINED_HIGHLIGHT_RADIUS = INTERCHANGE_OUTER_RADIUS + CURRENT_HIGHLIGHT_WIDTH;
+export const CONJOINED_HIGHLIGHT_RADIUS = INTERCHANGE_OUTER_RADIUS + CURRENT_HIGHLIGHT_WIDTH;
 export const STATION_WIPE_COMPONENT_RADIUS = CONJOINED_HIGHLIGHT_RADIUS;
 const CONJOINED_HIGHLIGHT_NECK_WIDTH = CONJOINED_NECK_WIDTH + CURRENT_HIGHLIGHT_WIDTH * 2;
 export const CONJOINED_CENTRE_LINE_WIDTH = 3.5;
@@ -407,7 +407,7 @@ export function createBarMarker(lineDirection: Point, color: string): SVGLineEle
   marker.setAttribute("x2", String(perpendicular.x * BAR_HALF_LENGTH));
   marker.setAttribute("y2", String(perpendicular.y * BAR_HALF_LENGTH));
   marker.setAttribute("stroke", color);
-  marker.setAttribute("stroke-width", String(BAR_WIDTH));
+  marker.setAttribute("stroke-width", String(STATION_BAR_WIDTH));
   marker.setAttribute("stroke-linecap", "butt");
   marker.setAttribute("class", "station-bar-marker");
   return marker;

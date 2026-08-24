@@ -1,4 +1,4 @@
-import { compareLineIds } from "../data/lines";
+import { compareLineIds, LINE_BY_ID } from "../data/lines";
 import type { GameState } from "../game/GameState";
 import {
   getConnectionFirstStepDirection,
@@ -7,10 +7,12 @@ import {
   type MovementDirection,
 } from "../game/movement";
 import type { Connection, LineId, NetworkData, Point } from "../data/types";
-import { getSvgPoint } from "../input/mouse";
 import { GRID_CELL_SIZE, gridPointToSvgPoint } from "./grid";
 import { CorridorLayout, type StationMarkerGroup } from "./corridorLayout";
-import { renderDirectionStub } from "./directionStubRenderer";
+import {
+  DEFAULT_DIRECTION_STUB_LENGTH,
+  renderDirectionStub,
+} from "./directionStubRenderer";
 import { renderRevealedLine } from "./lineRenderer";
 import {
   getCanonicalPath,
@@ -21,14 +23,19 @@ import {
 } from "./pathOffset";
 import { renderRiverThames } from "./riverRenderer";
 import {
+  CONJOINED_HIGHLIGHT_RADIUS,
   getStationLabelPlacement,
   isInterchangeStation,
   renderStationMarker,
+  STATION_BAR_WIDTH,
   type StationMarkerRenderOptions,
 } from "./stationRenderer";
-import { createCursorArrow } from "./pointerRenderer";
 
-export { getStubArrowHeadPoints } from "./directionStubRenderer";
+export {
+  DEFAULT_DIRECTION_STUB_LENGTH,
+  getStubArrowHeadPoints,
+  getStubShaftEnd,
+} from "./directionStubRenderer";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const BASE_VIEWBOX_WIDTH = 760;
@@ -36,6 +43,10 @@ const BASE_VIEWBOX_HEIGHT = 560;
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 2.4;
 const ZOOM_STEP = 1.25;
+const DEFAULT_GAMEPLAY_ZOOM = 1.25;
+const NON_INTERCHANGE_DIRECTION_STUB_LENGTH = DEFAULT_DIRECTION_STUB_LENGTH + 2;
+const INTERCHANGE_DIRECTION_STUB_LENGTH =
+  DEFAULT_DIRECTION_STUB_LENGTH + CONJOINED_HIGHLIGHT_RADIUS - STATION_BAR_WIDTH / 2;
 const MAP_PAN_PADDING = GRID_CELL_SIZE * 3;
 const MENU_PREVIEW_SECONDS_PER_ORBIT = 360;
 const MENU_PREVIEW_ORBIT_RADIUS_X = 360;
@@ -103,7 +114,7 @@ export class MapRenderer {
 
   private readonly corridorLayout: CorridorLayout;
 
-  private zoom = 1;
+  private zoom = DEFAULT_GAMEPLAY_ZOOM;
 
   private completedCameraCenter: Point | null = null;
 
@@ -125,8 +136,6 @@ export class MapRenderer {
 
   render(
     state: GameState,
-    pointerPoint: Point | null,
-    pointerDirection: MovementDirection,
     lineReveal: LineRevealAnimation | null = null,
     stationWipe: StationWipeAnimation | null = null,
     cameraPan: CameraPanAnimation | null = null,
@@ -230,12 +239,11 @@ export class MapRenderer {
       const stubLayer = document.createElementNS(SVG_NS, "g");
       stubLayer.setAttribute("class", "direction-stubs");
       this.svg.append(stubLayer);
-      const directionStubs = this.getDirectionStubs(state.currentStationId, state.revealedConnections);
+      const directionStubs = this.getDirectionStubs(state.currentStationId, state.selectedLineId);
       this.renderDirectionStubs(
         stubLayer,
         directionStubs,
-        !isInterchangeStation(currentStation),
-        state.selectedLineId,
+        isInterchangeStation(currentStation),
       );
     }
 
@@ -270,12 +278,6 @@ export class MapRenderer {
       );
     }
 
-    if (!state.completed) {
-      const pointerLayer = document.createElementNS(SVG_NS, "g");
-      pointerLayer.setAttribute("class", "pointer-layer");
-      this.svg.append(pointerLayer);
-      this.renderPointer(pointerLayer, pointerPoint, pointerDirection, state.rejectedMoveAt !== null);
-    }
   }
 
   renderIdle(): void {
@@ -482,13 +484,50 @@ export class MapRenderer {
     this.zoom = Math.max(MIN_ZOOM, this.zoom / ZOOM_STEP);
   }
 
-  zoomByWheel(deltaY: number): void {
+  zoomByWheel(deltaY: number, anchorClient?: Point): void {
     const factor = Math.exp(-Math.max(-100, Math.min(100, deltaY)) * 0.0018);
-    this.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, this.zoom * factor));
+    this.zoomByFactor(factor, anchorClient);
+  }
+
+  zoomByFactor(factor: number, anchorClient?: Point): void {
+    if (!Number.isFinite(factor) || factor <= 0) {
+      return;
+    }
+
+    const previousViewBoxSize = this.getViewBoxSize();
+    const nextZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, this.zoom * factor));
+    if (nextZoom === this.zoom) {
+      return;
+    }
+    this.zoom = nextZoom;
+
+    if (!anchorClient || !this.completedCameraCenter) {
+      return;
+    }
+    const bounds = this.svg.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) {
+      return;
+    }
+    const nextViewBoxSize = this.getViewBoxSize();
+    const anchorRatio = {
+      x: (anchorClient.x - bounds.left) / bounds.width - 0.5,
+      y: (anchorClient.y - bounds.top) / bounds.height - 0.5,
+    };
+    this.completedCameraCenter = clampViewCenter(
+      getZoomAnchoredCameraCenter(
+        this.completedCameraCenter,
+        previousViewBoxSize,
+        nextViewBoxSize,
+        anchorRatio,
+      ),
+      nextViewBoxSize,
+      this.mapBounds,
+      getMapPanPadding(nextViewBoxSize),
+    );
   }
 
   resetZoom(): void {
-    this.zoom = 1;
+    this.zoom = DEFAULT_GAMEPLAY_ZOOM;
   }
 
   panByClientDelta(deltaX: number, deltaY: number): void {
@@ -551,20 +590,6 @@ export class MapRenderer {
     }
 
     this.svg.append(layer);
-  }
-
-  private renderPointer(layer: SVGGElement, pointerPoint: Point | null, pointerDirection: MovementDirection, rejected: boolean): void {
-    if (!pointerPoint) {
-      return;
-    }
-
-    const svgPoint = getSvgPoint(this.svg, pointerPoint.x, pointerPoint.y);
-    const arrow = createCursorArrow(rejected);
-    arrow.setAttribute(
-      "transform",
-      `translate(${svgPoint.x} ${svgPoint.y}) scale(${1 / this.zoom}) rotate(${getDirectionAngle(pointerDirection)})`,
-    );
-    layer.append(arrow);
   }
 
   private getLineRevealCameraPoint(
@@ -658,31 +683,26 @@ export class MapRenderer {
     };
   }
 
-  private getDirectionStubs(stationId: string, revealedConnectionIds: Set<string>) {
-    return this.network.connections.flatMap((connection) => {
-      if (revealedConnectionIds.has(connection.id)) {
-        return [];
-      }
-      if (connection.from !== stationId && connection.to !== stationId) {
-        return [];
-      }
-
+  private getDirectionStubs(stationId: string, selectedLineId: LineId) {
+    return getAvailableDirectionConnections(this.network, stationId, selectedLineId).flatMap((connection) => {
+      const direction = getConnectionFirstStepDirection(connection, stationId);
       const unit = getDirectionStubUnit(connection, stationId);
-      if (!unit) {
+      if (!direction || !unit) {
         return [];
       }
 
       const linePoint = this.corridorLayout.getStationLinePoint(stationId, connection.line);
-      const start = getStationSpecificDirectionStubStart(stationId, connection.line, linePoint) ??
-        getDirectionStubStart(
-          this.corridorLayout.getStationMarkerGroups(stationId).map((group) => group.point),
-          linePoint,
-          unit,
-        );
+      const start = getDirectionStubStart(
+        this.corridorLayout.getStationMarkerGroups(stationId),
+        connection.line,
+        linePoint,
+      );
 
       return [
         {
           connection,
+          direction,
+          stationId,
           key: `${unit.x},${unit.y}|${start.x},${start.y}`,
           start,
           linePoint,
@@ -696,8 +716,7 @@ export class MapRenderer {
   private renderDirectionStubs(
     layer: SVGGElement,
     stubs: ReturnType<MapRenderer["getDirectionStubs"]>,
-    showArrowHeads: boolean,
-    selectedLineId: LineId,
+    interchange: boolean,
   ): void {
 
     const groups = new Map<string, typeof stubs>();
@@ -721,19 +740,26 @@ export class MapRenderer {
         offset: getCenteredOffset(index, group.length, PARALLEL_STUB_SPACING),
       }))
     );
-    renderItems.sort((a, b) =>
-      compareDirectionStubsBySelectedLine(a.stub, b.stub, selectedLineId)
-    );
-
     for (const { stub, offset } of renderItems) {
-      renderDirectionStub(layer, {
+      const targetStationId = stub.connection.from === stub.stationId
+        ? stub.connection.to
+        : stub.connection.from;
+      const targetStation = getStation(this.network, targetStationId);
+      const control = renderDirectionStub(layer, {
         lineId: stub.connection.line,
         start: stub.start,
         unit: stub.unit,
         normal: stub.normal,
         offset,
-        showArrowHead: showArrowHeads,
+        length: getDirectionStubRenderLength(interchange),
+        hitStartInset: getDirectionStubHitStartInset(interchange),
+        interaction: {
+          direction: stub.direction,
+          label: `Travel ${stub.direction} to ${targetStation.name} on the ${LINE_BY_ID[stub.connection.line].name} line`,
+        },
       });
+      control.dataset.connectionId = stub.connection.id;
+      control.dataset.targetStationId = targetStation.id;
     }
   }
 
@@ -741,6 +767,18 @@ export class MapRenderer {
 
 export type MapBounds = { minX: number; maxX: number; minY: number; maxY: number };
 export type MapPadding = number | { x: number; y: number };
+
+export function getZoomAnchoredCameraCenter(
+  cameraCenter: Point,
+  previousViewBoxSize: { width: number; height: number },
+  nextViewBoxSize: { width: number; height: number },
+  anchorRatio: Point,
+): Point {
+  return {
+    x: cameraCenter.x + anchorRatio.x * (previousViewBoxSize.width - nextViewBoxSize.width),
+    y: cameraCenter.y + anchorRatio.y * (previousViewBoxSize.height - nextViewBoxSize.height),
+  };
+}
 
 export function getMapPanPadding(viewBoxSize: { width: number; height: number }): Point {
   return {
@@ -819,14 +857,6 @@ export function compareDirectionStubsByRenderedOffset(
 ): number {
   return getDirectionStubRenderedOffsetProjection(first, group, corridorLayout) -
     getDirectionStubRenderedOffsetProjection(second, group, corridorLayout);
-}
-
-export function compareDirectionStubsBySelectedLine(
-  first: DirectionStubLike,
-  second: DirectionStubLike,
-  selectedLineId: LineId,
-): number {
-  return Number(first.connection.line === selectedLineId) - Number(second.connection.line === selectedLineId);
 }
 
 function getDirectionStubRenderedOffsetProjection(
@@ -1213,41 +1243,33 @@ export function getDirectionStubUnit(connection: Connection, stationId: string):
   };
 }
 
-export function getDirectionStubStart(
-  markerPoints: Point[],
-  linePoint: Point,
-  unit: Point,
-): Point {
-  if (markerPoints.length === 0) return linePoint;
-  if (markerPoints.length === 1) return markerPoints[0];
-
-  const minX = Math.min(...markerPoints.map((point) => point.x));
-  const maxX = Math.max(...markerPoints.map((point) => point.x));
-  const minY = Math.min(...markerPoints.map((point) => point.y));
-  const maxY = Math.max(...markerPoints.map((point) => point.y));
-  const isVertical = Math.abs(maxX - minX) < 0.01;
-  const isHorizontal = Math.abs(maxY - minY) < 0.01;
-
-  if (isVertical && unit.y !== 0) {
-    const targetY = unit.y < 0 ? minY : maxY;
-    return markerPoints.find((point) => Math.abs(point.y - targetY) < 0.01) ?? linePoint;
-  }
-  if (isHorizontal && unit.x !== 0) {
-    const targetX = unit.x < 0 ? minX : maxX;
-    return markerPoints.find((point) => Math.abs(point.x - targetX) < 0.01) ?? linePoint;
-  }
-  return linePoint;
+export function getAvailableDirectionConnections(
+  network: NetworkData,
+  stationId: string,
+  selectedLineId: LineId,
+): Connection[] {
+  return network.connections.filter(
+    (connection) =>
+      connection.line === selectedLineId &&
+      (connection.from === stationId || (!connection.oneWay && connection.to === stationId)) &&
+      getConnectionFirstStepDirection(connection, stationId) !== null,
+  );
 }
 
-export function getStationSpecificDirectionStubStart(
-  stationId: string,
+export function getDirectionStubRenderLength(interchange: boolean): number {
+  return interchange ? INTERCHANGE_DIRECTION_STUB_LENGTH : NON_INTERCHANGE_DIRECTION_STUB_LENGTH;
+}
+
+export function getDirectionStubHitStartInset(interchange: boolean): number {
+  return interchange ? CONJOINED_HIGHLIGHT_RADIUS : STATION_BAR_WIDTH / 2;
+}
+
+export function getDirectionStubStart(
+  markerGroups: readonly StationMarkerGroup[],
   lineId: LineId,
   linePoint: Point,
-): Point | null {
-  if (stationId === "stratford" && (lineId === "central" || lineId === "elizabeth")) {
-    return linePoint;
-  }
-  return null;
+): Point {
+  return markerGroups.find((group) => group.lines.includes(lineId))?.point ?? linePoint;
 }
 
 function snapUnitComponent(value: number): number {

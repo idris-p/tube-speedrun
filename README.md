@@ -23,9 +23,9 @@ A speedrunning game where you traverse the London Underground (and Elizabeth lin
 
 ## Controls
 
-- `A`/`D`: cycle to the previous and next available line at the current station
-- Move the mouse pointer around the current station to choose a direction
-- Left click to move in a given direction
+- Click/tap a direction stub to move along the selected line
+- Press and drag from one stub to another, then release, to change the chosen move
+- `A`/`D` or the line carousel arrow buttons: cycle through lines at an interchange
 
 ## Project Structure
 
@@ -33,7 +33,7 @@ A speedrunning game where you traverse the London Underground (and Elizabeth lin
 src/
   data/        Network data, line definitions, validation, generated map data
   game/        Game state, seeded round generation, movement, line selection
-  input/       Keyboard and pointer intent handling
+  input/       Keyboard and pointer input handling
   rendering/   SVG map, line, station, path, and river rendering
   ui/          HUD, menus, completion screens, results
   main.ts      Application entry point
@@ -41,4 +41,4 @@ src/
 
 ## Tech Stack
 
-This game was developed using TypeScript and the HTML Canvas.
+This game was developed using TypeScript and SVG.

@@ -1,12 +1,11 @@
 import type { LineId, NetworkData, Point, Station } from "../data/types";
 import { renderDirectionStub } from "../rendering/directionStubRenderer";
 import { gridPointToSvgPoint } from "../rendering/grid";
-import { createCursorArrow } from "../rendering/pointerRenderer";
+import { getDirectionStubRenderLength } from "../rendering/mapRenderer";
 import { renderStationMarker } from "../rendering/stationRenderer";
 import { createHudMetric, renderTimeValue } from "./hudMetric";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const DIAGONAL_COMPONENT = Math.SQRT1_2;
 
 export function createHowToPlayContent(): HTMLElement {
   const carousel = document.createElement("section");
@@ -18,19 +17,19 @@ export function createHowToPlayContent(): HTMLElement {
   list.className = "how-to-play-list";
   const cards = [
     instruction(
-      "Station markers",
-      createStationMarkerIllustration(),
-      "Use the coloured direction hint stubs to see which directions you can travel before moving. Interchange stations let you switch between tube lines.",
+      "Moving",
+      createMovementIllustration(),
+      "The coloured stubs around a station show which direction you can travel on your current line. Click or tap a stub to move in that direction.",
     ),
     instruction(
-      "Moving",
-      createPointerIllustration(),
-      "The arrow follows the direction of your mouse movement. Left-click to move in the direction it's pointing if the move is valid.",
+      "Station markers",
+      createStationMarkerIllustration(),
+      "White circular markers with a black outline are interchange stations, where you can switch between available lines.",
     ),
     instruction(
       "Changing lines",
       createLineSelectionIllustration(),
-      "Press A and D to cycle between available tube lines at interchange stations.",
+      "At an interchange, press A or D to cycle through available lines. On mobile, use the provided arrow buttons.",
     ),
     instruction(
       "Objective",
@@ -131,16 +130,41 @@ function instruction(title: string, illustration: Element, caption: string): HTM
   return item;
 }
 
-function createPointerIllustration(): SVGSVGElement {
-  const svg = tutorialSvg("-40 -40 80 80", "tutorial-pointer");
-  const arrow = createCursorArrow();
-  arrow.classList.add("tutorial-pointer-arrow");
-  svg.append(arrow);
+function createMovementIllustration(): SVGSVGElement {
+  const svg = tutorialSvg("-58 -56 148 112", "tutorial-movement");
+  const station = tutorialStation("tutorial-movement", "", 0, 0, ["central"]);
+  const point = gridPointToSvgPoint(station);
+  const stubLayer = svgLayer("direction-stubs");
+  renderDirectionStub(stubLayer, {
+    lineId: "central",
+    start: point,
+    unit: { x: -1, y: 0 },
+    length: getDirectionStubRenderLength(false),
+  });
+  const selectedStub = renderDirectionStub(stubLayer, {
+    lineId: "central",
+    start: point,
+    unit: { x: 1, y: 0 },
+    length: getDirectionStubRenderLength(false),
+  });
+  selectedStub.classList.add("direction-stub-selected");
+  svg.append(stubLayer);
+
+  const stationLayer = svgLayer("stations");
+  renderStationMarker(
+    stationLayer,
+    station,
+    { stations: [station], connections: [], temporary: false, notes: [] },
+    "central",
+    true,
+  );
+  svg.append(stationLayer);
+  svg.append(createTutorialMouseCursor({ x: point.x + 31, y: point.y - 2 }));
   return svg;
 }
 
 function createStationMarkerIllustration(): SVGSVGElement {
-  const svg = tutorialSvg("-52 -60 252 132", "tutorial-station-markers");
+  const svg = tutorialSvg("-56 -60 304 132", "tutorial-station-markers");
   const nonInterchange = tutorialStation(
     "tutorial-non-interchange",
     "Non-interchange",
@@ -183,14 +207,12 @@ function createStationMarkerIllustration(): SVGSVGElement {
   renderTutorialStubs(stubLayer, nonInterchangePoint, [
     { lineId: "central", unit: { x: -1, y: 0 } },
     { lineId: "central", unit: { x: 1, y: 0 } },
-  ], true);
+  ], getDirectionStubRenderLength(false));
   const interchangePoint = gridPointToSvgPoint(interchange);
   renderTutorialStubs(stubLayer, interchangePoint, [
     { lineId: "central", unit: { x: -1, y: 0 } },
     { lineId: "central", unit: { x: 1, y: 0 } },
-    { lineId: "victoria", unit: { x: 0, y: -1 } },
-    { lineId: "victoria", unit: { x: 0, y: 1 } },
-  ], false);
+  ], getDirectionStubRenderLength(true));
   svg.append(stubLayer);
 
   const stationLayer = svgLayer("stations");
@@ -210,21 +232,23 @@ function createLineSelectionIllustration(): SVGSVGElement {
     ["central", "victoria", "district"],
   );
   const point = gridPointToSvgPoint(station);
-  const stubLayer = svgLayer("direction-stubs");
-  renderTutorialStubs(stubLayer, point, [
+  const stubLayer = svgLayer("direction-stubs tutorial-line-stub-layers");
+  const centralStubs = svgLayer("tutorial-line-stubs tutorial-line-stubs-central");
+  renderTutorialStubs(centralStubs, point, [
     { lineId: "central", unit: { x: 0, y: -1 } },
     { lineId: "central", unit: { x: 0, y: 1 } },
-    { lineId: "victoria", unit: { x: -1, y: 0 } },
-    { lineId: "victoria", unit: { x: 1, y: 0 } },
-    {
-      lineId: "district",
-      unit: { x: DIAGONAL_COMPONENT, y: -DIAGONAL_COMPONENT },
-    },
-    {
-      lineId: "district",
-      unit: { x: -DIAGONAL_COMPONENT, y: DIAGONAL_COMPONENT },
-    },
-  ], false);
+  ], getDirectionStubRenderLength(true));
+  const victoriaStubs = svgLayer("tutorial-line-stubs tutorial-line-stubs-victoria");
+  renderTutorialStubs(victoriaStubs, point, [
+    { lineId: "victoria", unit: { x: Math.SQRT1_2, y: -Math.SQRT1_2 } },
+    { lineId: "victoria", unit: { x: -Math.SQRT1_2, y: Math.SQRT1_2 } },
+  ], getDirectionStubRenderLength(true));
+  const districtStubs = svgLayer("tutorial-line-stubs tutorial-line-stubs-district");
+  renderTutorialStubs(districtStubs, point, [
+    { lineId: "district", unit: { x: -1, y: 0 } },
+    { lineId: "district", unit: { x: 1, y: 0 } },
+  ], getDirectionStubRenderLength(true));
+  stubLayer.append(centralStubs, victoriaStubs, districtStubs);
   svg.append(stubLayer);
 
   const stationLayer = svgLayer("stations");
@@ -278,16 +302,29 @@ function renderTutorialStubs(
   layer: SVGGElement,
   start: Point,
   stubs: { lineId: LineId; unit: Point }[],
-  showArrowHead: boolean,
+  length: number,
 ): void {
   for (const stub of stubs) {
     renderDirectionStub(layer, {
       lineId: stub.lineId,
       start,
       unit: stub.unit,
-      showArrowHead,
+      length,
     });
   }
+}
+
+function createTutorialMouseCursor(position: Point): SVGImageElement {
+  const cursor = document.createElementNS(SVG_NS, "image");
+  cursor.setAttribute("href", "/mouse_cursor.png");
+  cursor.setAttribute("x", String(position.x));
+  cursor.setAttribute("y", String(position.y));
+  cursor.setAttribute("width", "28");
+  cursor.setAttribute("height", "40");
+  cursor.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  cursor.setAttribute("class", "tutorial-mouse-cursor");
+  cursor.setAttribute("aria-hidden", "true");
+  return cursor;
 }
 
 function tutorialSvg(viewBox: string, className: string): SVGSVGElement {

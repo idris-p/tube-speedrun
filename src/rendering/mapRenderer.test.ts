@@ -3,16 +3,20 @@ import { networkData } from "../data/network";
 import type { Connection, LineId, Point } from "../data/types";
 import {
   clampViewCenter,
-  compareDirectionStubsBySelectedLine,
   compareDirectionStubsByRenderedOffset,
   type DirectionStubLike,
+  DEFAULT_DIRECTION_STUB_LENGTH,
+  getAvailableDirectionConnections,
   getDirectionStubStart,
+  getDirectionStubHitStartInset,
+  getDirectionStubRenderLength,
   getDirectionStubUnit,
   getMapPanPadding,
   getPointAlongPolyline,
   getSelectedStationMarkerPoint,
-  getStationSpecificDirectionStubStart,
   getStubArrowHeadPoints,
+  getStubShaftEnd,
+  getZoomAnchoredCameraCenter,
   groupConnectionsByRenderedPath,
 } from "./mapRenderer";
 import { CorridorLayout } from "./corridorLayout";
@@ -26,19 +30,41 @@ import {
   PARALLEL_STUB_SPACING,
 } from "./pathOffset";
 
-describe("direction stub arrows", () => {
-  it("aligns an arrow head with the outgoing route direction", () => {
+describe("direction stub controls", () => {
+  it("builds a solid arrowhead aligned with the outgoing route direction", () => {
     expect(
       getStubArrowHeadPoints(
-        { x: 40, y: 0 },
+        { x: DEFAULT_DIRECTION_STUB_LENGTH, y: 0 },
         { x: 1, y: 0 },
         { x: 0, y: 1 },
       ),
     ).toEqual([
-      { x: 40, y: 0 },
-      { x: 29, y: STUB_STROKE_WIDTH / 2 },
-      { x: 29, y: -STUB_STROKE_WIDTH / 2 },
+      { x: 44, y: 0 },
+      { x: 30, y: 13 },
+      { x: 19, y: 13 },
+      { x: 28, y: STUB_STROKE_WIDTH / 2 },
+      { x: 28, y: -STUB_STROKE_WIDTH / 2 },
+      { x: 19, y: -13 },
+      { x: 30, y: -13 },
     ]);
+  });
+
+  it("overlaps the stub shaft with the arrowhead to avoid a rendering seam", () => {
+    expect(
+      getStubShaftEnd(
+        { x: DEFAULT_DIRECTION_STUB_LENGTH, y: 0 },
+        { x: 1, y: 0 },
+      ),
+    ).toEqual({ x: 30, y: 0 });
+  });
+
+  it("makes standard-station stubs slightly longer than interchange stubs", () => {
+    const standardVisibleLength =
+      getDirectionStubRenderLength(false) - getDirectionStubHitStartInset(false);
+    const interchangeVisibleLength =
+      getDirectionStubRenderLength(true) - getDirectionStubHitStartInset(true);
+
+    expect(standardVisibleLength).toBe(interchangeVisibleLength + 2);
   });
 
   it("uses the same first grid step direction as movement validation", () => {
@@ -57,42 +83,21 @@ describe("direction stub arrows", () => {
     });
   });
 
-  it("anchors north-facing stubs to the top marker and south-facing stubs to the bottom marker", () => {
+  it("anchors stubs to the marker belonging to their line regardless of travel direction", () => {
     const top = { x: 100, y: 100 };
     const bottom = { x: 100, y: 132 };
+    const markerGroups = [
+      { point: top, lines: ["elizabeth" as const] },
+      { point: bottom, lines: ["district" as const, "hammersmith-city" as const] },
+    ];
 
-    for (const unit of [{ x: 0, y: -1 }, { x: -1, y: -1 }, { x: 1, y: -1 }]) {
-      expect(getDirectionStubStart([bottom, top], bottom, unit)).toEqual(top);
-    }
-    for (const unit of [{ x: 0, y: 1 }, { x: -1, y: 1 }, { x: 1, y: 1 }]) {
-      expect(getDirectionStubStart([top, bottom], top, unit)).toEqual(bottom);
-    }
+    expect(getDirectionStubStart(markerGroups, "elizabeth", bottom)).toEqual(top);
+    expect(getDirectionStubStart(markerGroups, "district", top)).toEqual(bottom);
   });
 
-  it("anchors east-facing stubs to the right marker and west-facing stubs to the left marker", () => {
-    const left = { x: 100, y: 100 };
-    const right = { x: 132, y: 100 };
-
-    for (const unit of [{ x: 1, y: 0 }, { x: 1, y: -1 }, { x: 1, y: 1 }]) {
-      expect(getDirectionStubStart([left, right], left, unit)).toEqual(right);
-    }
-    for (const unit of [{ x: -1, y: 0 }, { x: -1, y: -1 }, { x: -1, y: 1 }]) {
-      expect(getDirectionStubStart([right, left], right, unit)).toEqual(left);
-    }
-  });
-
-  it("keeps line-specific anchors for perpendicular and diagonal marker arrangements", () => {
-    const linePoint = { x: 132, y: 132 };
-
-    expect(getDirectionStubStart([{ x: 100, y: 100 }, { x: 100, y: 132 }], linePoint, { x: 1, y: 0 }))
-      .toEqual(linePoint);
-    expect(getDirectionStubStart([{ x: 100, y: 100 }, { x: 132, y: 132 }], linePoint, { x: 0, y: -1 }))
-      .toEqual(linePoint);
-  });
-
-  it("anchors single-marker stubs to a displaced marker instead of the path point", () => {
-    expect(getDirectionStubStart([{ x: 100, y: 100 }], { x: 132, y: 100 }, { x: 1, y: 0 }))
-      .toEqual({ x: 100, y: 100 });
+  it("falls back to the line point when no marker group contains the line", () => {
+    const linePoint = { x: 132, y: 100 };
+    expect(getDirectionStubStart([], "elizabeth", linePoint)).toEqual(linePoint);
   });
 
   it("orders stubs to match render-only line offsets", () => {
@@ -125,33 +130,54 @@ describe("direction stub arrows", () => {
     const layout = new CorridorLayout(networkData);
     const centralMarker = layout.getStationLinePoint("stratford", "central");
     const elizabethMarker = layout.getStationLinePoint("stratford", "elizabeth");
+    const markerGroups = layout.getStationMarkerGroups("stratford");
 
     expect(centralMarker.x).toBeLessThan(elizabethMarker.x);
 
     for (const line of ["central", "elizabeth"] as const) {
       const marker = layout.getStationLinePoint("stratford", line);
-      expect(getStationSpecificDirectionStubStart("stratford", line, marker)).toEqual(marker);
+      expect(getDirectionStubStart(markerGroups, line, marker)).toEqual(marker);
     }
   });
 
-  it("renders the selected line's stub after overlapping alternatives", () => {
-    const stubs = (["central", "district", "piccadilly"] as const).map((line) => ({
-      connection: {
-        id: `${line}:a:b`,
-        from: "a",
-        to: "b",
-        line,
-        path: [{ x: 0, y: 0 }, { x: 1, y: 0 }],
-      },
-      linePoint: { x: 16, y: 16 },
-      normal: { x: 0, y: 1 },
-    })) satisfies DirectionStubLike[];
+  it("anchors Whitechapel Elizabeth stubs to its top marker", () => {
+    const layout = new CorridorLayout(networkData);
+    const markerGroups = layout.getStationMarkerGroups("whitechapel");
+    const elizabethMarker = layout.getStationLinePoint("whitechapel", "elizabeth");
+    const districtMarker = layout.getStationLinePoint("whitechapel", "district");
 
-    const ordered = [...stubs].sort((first, second) =>
-      compareDirectionStubsBySelectedLine(first, second, "district")
+    expect(elizabethMarker.y).toBeLessThan(districtMarker.y);
+    expect(getDirectionStubStart(markerGroups, "elizabeth", districtMarker))
+      .toEqual(elizabethMarker);
+  });
+
+  it("only exposes valid departures on the selected line", () => {
+    const centralConnections = getAvailableDirectionConnections(
+      networkData,
+      "oxford-circus",
+      "central",
     );
 
-    expect(ordered.at(-1)?.connection.line).toBe("district");
+    expect(centralConnections.length).toBeGreaterThan(0);
+    expect(centralConnections.every((connection) => connection.line === "central")).toBe(true);
+    expect(centralConnections.some((connection) => connection.line === "victoria")).toBe(false);
+  });
+
+  it("keeps a departure available after its segment has already been explored", () => {
+    const departures = getAvailableDirectionConnections(
+      networkData,
+      "oxford-circus",
+      "central",
+    );
+    const exploredConnectionId = departures[0]?.id;
+    const departuresAfterExploring = getAvailableDirectionConnections(
+      networkData,
+      "oxford-circus",
+      "central",
+    );
+
+    expect(exploredConnectionId).toBeDefined();
+    expect(departuresAfterExploring.some((connection) => connection.id === exploredConnectionId)).toBe(true);
   });
 });
 
@@ -521,5 +547,16 @@ describe("completed map panning", () => {
       .toEqual({ x: 1_000, y: 400 });
     expect(clampViewCenter({ x: 500, y: 0 }, viewBoxSize, bounds, padding))
       .toEqual({ x: 500, y: 0 });
+  });
+});
+
+describe("anchored map zoom", () => {
+  it("keeps the map point beneath the pinch midpoint stationary", () => {
+    expect(getZoomAnchoredCameraCenter(
+      { x: 500, y: 400 },
+      { width: 800, height: 600 },
+      { width: 400, height: 300 },
+      { x: 0.25, y: -0.25 },
+    )).toEqual({ x: 600, y: 325 });
   });
 });

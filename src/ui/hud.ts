@@ -7,6 +7,7 @@ import { getLineCyclePreview } from "../game/lineSelection";
 import { getStation } from "../game/movement";
 import { ROUND_COUNT, type RunResults, type RunState } from "../game/RunState";
 import { GRID_CELL_SIZE } from "../rendering/grid";
+import { getStubArrowHeadPoints } from "../rendering/directionStubRenderer";
 import { LINE_STROKE_WIDTH } from "../rendering/lineStyles";
 import {
   INTERCHANGE_OUTLINE_WIDTH,
@@ -30,6 +31,7 @@ export type HudCallbacks = {
   onFocusGameplayMapStation: (stationId: string) => void;
   onGameplayMapZoomIn: () => void;
   onGameplayMapZoomOut: () => void;
+  onCycleLine: (direction: -1 | 1) => void;
 };
 
 export type MenuMode = "home" | "how-to-play" | "seed-choice" | "seed-entry";
@@ -58,6 +60,7 @@ export class Hud {
   private readonly stationValue: HTMLSpanElement;
   private readonly destinationValue: HTMLSpanElement;
   private readonly lineIndicator: HTMLDivElement;
+  private readonly lineCycleControls: HTMLDivElement;
   private zoomControls: HTMLDivElement | null = null;
   private readonly overlayButton: HTMLButtonElement;
   private readonly completionOverlay: HTMLDivElement;
@@ -147,6 +150,8 @@ export class Hud {
 
     this.lineIndicator = document.createElement("div");
     this.lineIndicator.className = "line-indicator";
+    this.lineCycleControls = document.createElement("div");
+    this.lineCycleControls.className = "line-cycle-controls";
 
     this.mapHost = document.createElement("div");
     this.mapHost.className = "map-host";
@@ -609,12 +614,14 @@ export class Hud {
     resultsTable.append(resultsTableHead, this.resultsTableBody, resultsTableFoot);
     resultsPanel.append(resultsTitle, resultsSeed, this.resultsSeedMessage, resultsTable);
     this.resultsOverlay.append(resultsExit, resultsPlayAgain, resultsPanel);
+    const portraitOrientationOverlay = createPortraitOrientationOverlay();
 
     root.append(
       this.mapHost,
       this.statsPanel,
       this.timerPanel,
       this.lineIndicator,
+      this.lineCycleControls,
       this.temporaryBanner,
       this.menuOverlay,
       this.mapViewerControls,
@@ -627,7 +634,9 @@ export class Hud {
       this.gameplayMapOverlay,
       this.dismissedRoundActionButton,
       this.resultsOverlay,
+      portraitOrientationOverlay,
     );
+    window.addEventListener("resize", () => this.updateHowToPlayScale());
   }
 
   showMenu(): void {
@@ -956,31 +965,12 @@ export class Hud {
   private setMenuMode(mode: MenuMode): void {
     this.menuMode = mode;
     this.menuOverlay.dataset.menuMode = mode;
-    const unsupportedDevice = shouldShowUnsupportedDeviceMessage(
-      mode,
-      window.matchMedia("(pointer: coarse)").matches,
-    );
-    this.menuOverlay.dataset.unsupportedDevice = String(unsupportedDevice);
-    this.menuActions.classList.toggle("main-menu-actions-device-message", unsupportedDevice);
     this.menuBackButton.hidden = mode === "home";
     this.menuTitle.hidden = mode === "how-to-play";
     this.menuTitle.textContent = "Rush Hour";
     this.menuActions.replaceChildren();
 
     if (mode === "home") {
-      if (unsupportedDevice) {
-        const message = document.createElement("p");
-        message.className = "main-menu-device-message";
-        const heading = document.createElement("span");
-        heading.className = "main-menu-device-message-heading";
-        heading.textContent = "Designed for desktop and laptop computers.";
-        const detail = document.createElement("span");
-        detail.className = "main-menu-device-message-detail";
-        detail.textContent = "Mobile and tablet devices are not supported.";
-        message.append(heading, detail);
-        this.menuActions.append(message);
-        return;
-      }
       this.menuActions.append(
         menuButton("Play", "primary", () => this.setMenuMode("seed-choice")),
         menuButton("How to Play", "secondary", () => this.setMenuMode("how-to-play")),
@@ -991,6 +981,7 @@ export class Hud {
 
     if (mode === "how-to-play") {
       this.menuActions.append(createHowToPlayContent());
+      window.requestAnimationFrame(() => this.updateHowToPlayScale());
       return;
     }
 
@@ -1021,6 +1012,29 @@ export class Hud {
     );
     this.menuActions.append(form);
     window.setTimeout(() => this.menuSeedInput.focus(), 0);
+  }
+
+  private updateHowToPlayScale(): void {
+    if (this.menuMode !== "how-to-play" || this.menuOverlay.hidden) {
+      return;
+    }
+
+    const menuStyle = window.getComputedStyle(this.menuOverlay);
+    const availableWidth = this.menuOverlay.clientWidth
+      - Number.parseFloat(menuStyle.paddingLeft)
+      - Number.parseFloat(menuStyle.paddingRight);
+    const availableHeight = this.menuOverlay.clientHeight
+      - Number.parseFloat(menuStyle.paddingTop)
+      - Number.parseFloat(menuStyle.paddingBottom);
+    const designWidth = this.menuContent.offsetWidth;
+    const designHeight = this.menuContent.offsetHeight;
+
+    if (availableWidth <= 0 || availableHeight <= 0 || designWidth <= 0 || designHeight <= 0) {
+      return;
+    }
+
+    const scale = Math.min(1, availableWidth / designWidth, availableHeight / designHeight);
+    this.menuOverlay.style.setProperty("--how-to-play-scale", String(scale));
   }
 
   isGameplayHelpOpen(): boolean {
@@ -1160,6 +1174,7 @@ export class Hud {
   private renderLineIndicator(state: GameState): void {
     const preview = getLineCyclePreview(state, this.network);
     this.lineIndicator.replaceChildren();
+    this.lineCycleControls.replaceChildren();
     this.lineIndicator.style.removeProperty("--line-color");
     this.lineIndicator.style.removeProperty("--line-text-color");
 
@@ -1173,6 +1188,10 @@ export class Hud {
       lineChip("A", preview.previous, canSwitch ? "preview" : "disabled"),
       lineChip("Now", preview.current, "current"),
       lineChip("D", preview.next, canSwitch ? "preview" : "disabled"),
+    );
+    this.lineCycleControls.append(
+      lineCycleButton(-1, !canSwitch, this.callbacks.onCycleLine),
+      lineCycleButton(1, !canSwitch, this.callbacks.onCycleLine),
     );
   }
 
@@ -1194,6 +1213,59 @@ export class Hud {
     this.zoomControls?.remove();
     this.zoomControls = null;
   }
+}
+
+function createPortraitOrientationOverlay(): HTMLDivElement {
+  const overlay = document.createElement("div");
+  overlay.className = "portrait-orientation-overlay";
+  overlay.setAttribute("role", "status");
+  overlay.setAttribute("aria-label", "Rotate your device to landscape orientation");
+
+  const prompt = document.createElement("div");
+  prompt.className = "portrait-orientation-prompt";
+
+  const icon = document.createElementNS(SVG_NS, "svg");
+  icon.setAttribute("class", "portrait-orientation-icon");
+  icon.setAttribute("viewBox", "0 0 140 130");
+  icon.setAttribute("aria-hidden", "true");
+
+  const phone = document.createElementNS(SVG_NS, "g");
+  phone.setAttribute("class", "portrait-orientation-phone");
+  const phoneBody = document.createElementNS(SVG_NS, "rect");
+  phoneBody.setAttribute("x", "51");
+  phoneBody.setAttribute("y", "26");
+  phoneBody.setAttribute("width", "38");
+  phoneBody.setAttribute("height", "68");
+  phoneBody.setAttribute("rx", "6");
+  const phoneHome = document.createElementNS(SVG_NS, "line");
+  phoneHome.setAttribute("x1", "63");
+  phoneHome.setAttribute("y1", "85");
+  phoneHome.setAttribute("x2", "77");
+  phoneHome.setAttribute("y2", "85");
+  phone.append(phoneBody, phoneHome);
+
+  const turn = document.createElementNS(SVG_NS, "path");
+  turn.setAttribute("class", "portrait-orientation-turn");
+  turn.setAttribute("d", "M 70 5 A 55 55 0 0 1 125 60 L 125 62");
+  const arrowhead = document.createElementNS(SVG_NS, "polygon");
+  arrowhead.setAttribute("class", "portrait-orientation-arrowhead");
+  arrowhead.setAttribute(
+    "points",
+    getStubArrowHeadPoints(
+      { x: 125, y: 76 },
+      { x: 0, y: 1 },
+      { x: -1, y: 0 },
+    ).map((point) => `${point.x},${point.y}`).join(" "),
+  );
+  icon.append(phone, turn, arrowhead);
+
+  const title = document.createElement("strong");
+  title.textContent = "Rotate your device";
+  const message = document.createElement("span");
+  message.textContent = "This game is designed for landscape play.";
+  prompt.append(icon, title, message);
+  overlay.append(prompt);
+  return overlay;
 }
 
 function menuButton(
@@ -1422,6 +1494,27 @@ function lineChip(label: string, lineId: keyof typeof LINE_BY_ID, variant: "prev
   return chip;
 }
 
+function lineCycleButton(
+  direction: -1 | 1,
+  disabled: boolean,
+  callback: (direction: -1 | 1) => void,
+): HTMLButtonElement {
+  const isPrevious = direction === -1;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "line-cycle-button";
+  button.disabled = disabled;
+  button.ariaLabel = isPrevious ? "Select previous line (A)" : "Select next line (D)";
+  button.title = button.ariaLabel;
+
+  const icon = document.createElement("span");
+  icon.className = `line-cycle-icon line-cycle-icon-${isPrevious ? "previous" : "next"}`;
+  icon.setAttribute("aria-hidden", "true");
+  button.append(icon);
+  button.addEventListener("click", () => callback(direction));
+  return button;
+}
+
 function completionStat(label: string, valueElement: HTMLSpanElement): HTMLDivElement {
   const wrapper = document.createElement("div");
   wrapper.className = "completion-stat";
@@ -1484,10 +1577,6 @@ export function formatMilliseconds(milliseconds: number): string {
 function renderMilliseconds(element: HTMLElement, milliseconds: number): void {
   const { minutes, seconds, centiseconds } = getTimeParts(milliseconds);
   renderTimeValue(element, { minutes, seconds, fraction: centiseconds });
-}
-
-export function shouldShowUnsupportedDeviceMessage(mode: MenuMode, pointerIsCoarse: boolean): boolean {
-  return mode === "home" && pointerIsCoarse;
 }
 
 function mapMarkerIcon(): SVGSVGElement {

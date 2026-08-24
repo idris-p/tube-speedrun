@@ -12,13 +12,24 @@ import {
 import { generateRoundConfigs, generateSeed } from "./game/seed";
 import { ROUND_COUNT, type RoundStats, type RunResults, type RunState } from "./game/RunState";
 import { cycleSelectedLine } from "./game/lineSelection";
-import { attemptMoveInDirection, type MovementDirection } from "./game/movement";
-import { bindKeyboardControls } from "./input/keyboard";
 import {
-  clearMouseIntentPosition,
-  createMouseIntentState,
-  updateMouseIntent,
-} from "./input/mouseIntent";
+  attemptMoveInDirection,
+  MOVEMENT_DIRECTIONS,
+  type MovementDirection,
+} from "./game/movement";
+import { bindKeyboardControls } from "./input/keyboard";
+import { getPinchGesture, type PinchGesture } from "./input/pinchZoom";
+import {
+  getStubHitDistance,
+  getSvgPoint,
+  isPointInPolygon,
+} from "./input/stubHitTesting";
+import {
+  beginStubSelection,
+  createStubSelectionState,
+  dragStubSelection,
+  releaseStubSelection,
+} from "./input/stubSelection";
 import { MapRenderer } from "./rendering/mapRenderer";
 import { LINE_REVEAL_ANIMATION_SPEED } from "./rendering/lineRenderer";
 import { GRID_CELL_SIZE } from "./rendering/grid";
@@ -78,13 +89,14 @@ let results: RunResults | null = null;
 let mapViewerActive = false;
 let completionCelebration: CompletionCelebration | null = null;
 let countdown: { run: RunState; startedAt: number } | null = null;
-let pointerPoint: Point | null = null;
-let mouseIntent = createMouseIntentState();
-let activeMovePointerId: number | null = null;
-let heldMoveConsumed = false;
-let lastHeldMoveAttemptDirection: MovementDirection | null = null;
+let moveSelection = createStubSelectionState();
+let selectedMoveStub: SVGGElement | null = null;
+let hoveredMoveStub: SVGGElement | null = null;
+let lastMousePoint: Point | null = null;
 let panPointerId: number | null = null;
 let lastPanPoint: Point | null = null;
+const mapTouchPoints = new Map<number, Point>();
+let mapPinchGesture: PinchGesture | null = null;
 let lineRevealAnimation: {
   connectionId: string;
   fromStationId: string;
@@ -107,6 +119,9 @@ let cameraPanAnimation: {
 let gameplayMapRenderer: MapRenderer;
 let gameplayMapPanPointerId: number | null = null;
 let gameplayMapLastPanPoint: Point | null = null;
+const gameplayMapTouchPoints = new Map<number, Point>();
+let gameplayMapPinchGesture: PinchGesture | null = null;
+const mobilePortraitQuery = window.matchMedia("(any-pointer: coarse) and (orientation: portrait)");
 
 const hud = new Hud(appRoot, networkData, {
   onStartRandomSeed: () => startRun(generateSeed(), "random"),
@@ -165,6 +180,7 @@ const hud = new Hud(appRoot, networkData, {
     render();
   },
   onOpenGameplayMap: () => {
+    resetGameplayMapGesture();
     gameplayMapRenderer.resetExplorerView();
     gameplayMapRenderer.renderExplorer();
   },
@@ -180,19 +196,36 @@ const hud = new Hud(appRoot, networkData, {
     gameplayMapRenderer.zoomOut();
     gameplayMapRenderer.renderExplorer();
   },
+  onCycleLine: (direction) => changeSelectedLine(direction),
 });
 
 const renderer = new MapRenderer(hud.mapHost, networkData);
 gameplayMapRenderer = new MapRenderer(hud.gameplayMapHost, networkData);
+mobilePortraitQuery.addEventListener("change", () => render());
 
 gameplayMapRenderer.svg.addEventListener("wheel", (event) => {
   event.preventDefault();
-  gameplayMapRenderer.zoomByWheel(event.deltaY);
+  gameplayMapRenderer.zoomByWheel(event.deltaY, { x: event.clientX, y: event.clientY });
   gameplayMapRenderer.renderExplorer();
 }, { passive: false });
 
 gameplayMapRenderer.svg.addEventListener("pointerdown", (event) => {
   if (event.button !== 0) {
+    return;
+  }
+  if (event.pointerType === "touch") {
+    gameplayMapTouchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    gameplayMapRenderer.svg.setPointerCapture(event.pointerId);
+    if (gameplayMapTouchPoints.size >= 2) {
+      gameplayMapPinchGesture = getPinchGesture(gameplayMapTouchPoints);
+      gameplayMapPanPointerId = null;
+      gameplayMapLastPanPoint = null;
+    } else {
+      gameplayMapPanPointerId = event.pointerId;
+      gameplayMapLastPanPoint = { x: event.clientX, y: event.clientY };
+    }
+    gameplayMapRenderer.svg.classList.add("tube-map-panning");
+    event.preventDefault();
     return;
   }
   gameplayMapPanPointerId = event.pointerId;
@@ -203,6 +236,26 @@ gameplayMapRenderer.svg.addEventListener("pointerdown", (event) => {
 });
 
 gameplayMapRenderer.svg.addEventListener("pointermove", (event) => {
+  if (event.pointerType === "touch" && gameplayMapTouchPoints.has(event.pointerId)) {
+    gameplayMapTouchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (gameplayMapTouchPoints.size >= 2) {
+      const nextGesture = getPinchGesture(gameplayMapTouchPoints);
+      if (gameplayMapPinchGesture && nextGesture) {
+        gameplayMapRenderer.panByClientDelta(
+          nextGesture.midpoint.x - gameplayMapPinchGesture.midpoint.x,
+          nextGesture.midpoint.y - gameplayMapPinchGesture.midpoint.y,
+        );
+        gameplayMapRenderer.zoomByFactor(
+          nextGesture.distance / gameplayMapPinchGesture.distance,
+          nextGesture.midpoint,
+        );
+      }
+      gameplayMapPinchGesture = nextGesture;
+      gameplayMapRenderer.renderExplorer();
+      event.preventDefault();
+      return;
+    }
+  }
   if (gameplayMapPanPointerId !== event.pointerId || !gameplayMapLastPanPoint) {
     return;
   }
@@ -216,6 +269,22 @@ gameplayMapRenderer.svg.addEventListener("pointermove", (event) => {
 });
 
 const endGameplayMapPan = (event: PointerEvent): void => {
+  if (event.pointerType === "touch" && gameplayMapTouchPoints.delete(event.pointerId)) {
+    if (gameplayMapRenderer.svg.hasPointerCapture(event.pointerId)) {
+      gameplayMapRenderer.svg.releasePointerCapture(event.pointerId);
+    }
+    const remainingTouch = gameplayMapTouchPoints.entries().next().value as [number, Point] | undefined;
+    gameplayMapPinchGesture = null;
+    if (remainingTouch) {
+      gameplayMapPanPointerId = remainingTouch[0];
+      gameplayMapLastPanPoint = remainingTouch[1];
+    } else {
+      gameplayMapPanPointerId = null;
+      gameplayMapLastPanPoint = null;
+      gameplayMapRenderer.svg.classList.remove("tube-map-panning");
+    }
+    return;
+  }
   if (gameplayMapPanPointerId !== event.pointerId) {
     return;
   }
@@ -228,6 +297,19 @@ const endGameplayMapPan = (event: PointerEvent): void => {
 };
 gameplayMapRenderer.svg.addEventListener("pointerup", endGameplayMapPan);
 gameplayMapRenderer.svg.addEventListener("pointercancel", endGameplayMapPan);
+
+function resetGameplayMapGesture(): void {
+  for (const pointerId of gameplayMapTouchPoints.keys()) {
+    if (gameplayMapRenderer.svg.hasPointerCapture(pointerId)) {
+      gameplayMapRenderer.svg.releasePointerCapture(pointerId);
+    }
+  }
+  gameplayMapTouchPoints.clear();
+  gameplayMapPinchGesture = null;
+  gameplayMapPanPointerId = null;
+  gameplayMapLastPanPoint = null;
+  gameplayMapRenderer.svg.classList.remove("tube-map-panning");
+}
 
 function startRun(seed: string, seedSource: RunState["seedSource"]): void {
   mapViewerActive = false;
@@ -292,11 +374,8 @@ function advanceFromCompletedRound(): void {
 }
 
 function resetRunTransientState(): void {
-  pointerPoint = null;
-  mouseIntent = createMouseIntentState();
-  activeMovePointerId = null;
-  heldMoveConsumed = false;
-  lastHeldMoveAttemptDirection = null;
+  cancelMovePointerSelection();
+  resetMapTouchGesture();
   lineRevealAnimation = null;
   stationWipeAnimation = null;
   cameraPanAnimation = null;
@@ -309,24 +388,27 @@ function resetRunTransientState(): void {
 
 function render(now = performance.now()): void {
   if (mapViewerActive) {
-    renderer.renderExplorer();
+    if (mobilePortraitQuery.matches) {
+      renderer.renderMenuPreview(now);
+    } else {
+      renderer.renderExplorer();
+    }
   } else if (results) {
     renderer.renderMenuPreview(now);
     hud.showResults(results);
   } else if (state && runState) {
-    if (hud.isGameplayHelpOpen()) {
+    if (mobilePortraitQuery.matches || hud.isGameplayHelpOpen()) {
       renderer.renderMenuPreview(now);
     } else {
       renderer.render(
         state,
-        pointerPoint,
-        mouseIntent.direction,
         getActiveLineRevealAnimation(now),
         getActiveStationWipeAnimation(now),
         getActiveCameraPanAnimation(now),
         completionCelebration !== null,
         completionCelebration !== null && completionCelebration.startedAt !== null,
       );
+      refreshHoveredMoveStub();
     }
     hud.update(state, now, runState, completionCelebration === null);
   } else if (countdown) {
@@ -341,7 +423,9 @@ function render(now = performance.now()): void {
 function tick(): void {
   const now = performance.now();
   if (mapViewerActive) {
-    // Explorer rendering is event-driven while idle.
+    if (mobilePortraitQuery.matches) {
+      renderer.renderMenuPreview(now);
+    }
   } else if (countdown) {
     if (now - countdown.startedAt >= COUNTDOWN_STEP_MS * COUNTDOWN_START_VALUE) {
       completeCountdown(countdown.run, now);
@@ -487,11 +571,12 @@ function getCameraPanAnimationProgress(now: number): number {
   return Math.max(0, Math.min(1, (now - cameraPanAnimation.startedAt) * LINE_SWITCH_CAMERA_PAN_SPEED));
 }
 
-bindKeyboardControls((direction) => {
+function changeSelectedLine(direction: -1 | 1): void {
   if (!state || hud.isGameplayOverlayOpen()) {
     return;
   }
 
+  cancelMovePointerSelection();
   const previousState = state;
   state = cycleSelectedLine(state, networkData, direction);
   const pan = renderer.getLineSwitchCameraPan(previousState, state);
@@ -500,11 +585,33 @@ bindKeyboardControls((direction) => {
   } else {
     cameraPanAnimation = null;
   }
-  tryHeldPointerMove(performance.now(), true);
   render();
-});
+}
+
+bindKeyboardControls(changeSelectedLine);
 
 renderer.svg.addEventListener("pointermove", (event) => {
+  rememberMousePoint(event);
+  if (event.pointerType === "touch" && mapTouchPoints.has(event.pointerId)) {
+    mapTouchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (mapTouchPoints.size >= 2) {
+      const nextGesture = getPinchGesture(mapTouchPoints);
+      if (mapPinchGesture && nextGesture) {
+        renderer.panByClientDelta(
+          nextGesture.midpoint.x - mapPinchGesture.midpoint.x,
+          nextGesture.midpoint.y - mapPinchGesture.midpoint.y,
+        );
+        renderer.zoomByFactor(
+          nextGesture.distance / mapPinchGesture.distance,
+          nextGesture.midpoint,
+        );
+      }
+      mapPinchGesture = nextGesture;
+      render();
+      event.preventDefault();
+      return;
+    }
+  }
   if (panPointerId === event.pointerId && lastPanPoint) {
     renderer.panByClientDelta(event.clientX - lastPanPoint.x, event.clientY - lastPanPoint.y);
     lastPanPoint = { x: event.clientX, y: event.clientY };
@@ -512,39 +619,30 @@ renderer.svg.addEventListener("pointermove", (event) => {
     return;
   }
 
-  if (mapViewerActive) {
+  if (!canSelectMovementStub()) {
+    setHoveredMoveStub(null);
     return;
   }
 
-  if (!state) {
-    return;
+  const hoveredStub = getDirectionStubControlAtPoint(event.clientX, event.clientY);
+  setHoveredMoveStub(hoveredStub);
+  if (hoveredStub && moveSelection.pointerId === event.pointerId) {
+    selectMoveStub(hoveredStub);
   }
-
-  if (state.completed) {
-    return;
+  if (moveSelection.pointerId === event.pointerId) {
+    event.preventDefault();
   }
-
-  const currentMousePosition = { x: event.clientX, y: event.clientY };
-  const previousDirection = mouseIntent.direction;
-  mouseIntent = updateMouseIntent(mouseIntent, currentMousePosition, performance.now());
-  pointerPoint = currentMousePosition;
-  if (activeMovePointerId === event.pointerId) {
-    tryHeldPointerMove(performance.now(), mouseIntent.direction !== previousDirection);
-  }
-  render();
 });
 
 renderer.svg.addEventListener("pointerleave", () => {
-  if (panPointerId !== null || activeMovePointerId !== null) {
-    return;
+  lastMousePoint = null;
+  if (moveSelection.pointerId === null) {
+    setHoveredMoveStub(null);
   }
-  pointerPoint = null;
-  mouseIntent = clearMouseIntentPosition(mouseIntent);
-  render();
 });
 
-function attemptMoveFromCurrentIntent(now: number): boolean {
-  if (!state || state.completed || hud.isGameplayOverlayOpen()) {
+function attemptMoveFromStub(direction: MovementDirection, now: number): boolean {
+  if (!canSelectMovementStub() || !state) {
     return false;
   }
 
@@ -552,7 +650,7 @@ function attemptMoveFromCurrentIntent(now: number): boolean {
   const fromStationId = state.currentStationId;
   const selectedLineId = state.selectedLineId;
   const revealedConnectionsBeforeMove = state.revealedConnections;
-  const result = attemptMoveInDirection(state, networkData, mouseIntent.direction, now);
+  const result = attemptMoveInDirection(state, networkData, direction, now);
   state = result.state;
 
   if (result.moved && result.targetStationId) {
@@ -567,7 +665,7 @@ function attemptMoveFromCurrentIntent(now: number): boolean {
         ? result.targetStationId
         : null,
       revealLine,
-      direction: mouseIntent.direction,
+      direction,
       stationWipeStarted: false,
       startedAt: now,
     };
@@ -575,8 +673,6 @@ function attemptMoveFromCurrentIntent(now: number): boolean {
 
   if (state.completed) {
     completionCelebration = createCompletionCelebration();
-    pointerPoint = null;
-    mouseIntent = clearMouseIntentPosition(mouseIntent);
   }
 
   if (!result.moved && state.rejectedMoveAt !== null) {
@@ -594,23 +690,150 @@ function attemptMoveFromCurrentIntent(now: number): boolean {
   return result.moved;
 }
 
-function tryHeldPointerMove(now: number, forceAttempt = false): void {
-  if (
-    activeMovePointerId === null ||
-    heldMoveConsumed ||
-    !state ||
-    state.completed ||
-    hud.isGameplayOverlayOpen()
-  ) {
-    return;
+function getDirectionStubControl(target: EventTarget | null): SVGGElement | null {
+  if (!(target instanceof Element)) {
+    return null;
+  }
+  const control = target.closest<SVGGElement>(".direction-stub-control[data-movement-direction]");
+  return control && renderer.svg.contains(control) ? control : null;
+}
+
+function getDirectionStubControlAtPoint(clientX: number, clientY: number): SVGGElement | null {
+  let closestControl: SVGGElement | null = null;
+  let closestDistance = Number.POSITIVE_INFINITY;
+  let closestPriority = -1;
+  for (const control of renderer.svg.querySelectorAll<SVGGElement>(
+    ".direction-stub-control[data-movement-direction]",
+  )) {
+    const hitTarget = control.querySelector<SVGLineElement>(".direction-stub-hit");
+    if (!hitTarget) {
+      continue;
+    }
+    const point = getSvgPoint(hitTarget, clientX, clientY);
+    if (!point) {
+      continue;
+    }
+    const start = {
+      x: Number(hitTarget.getAttribute("x1")),
+      y: Number(hitTarget.getAttribute("y1")),
+    };
+    const end = {
+      x: Number(hitTarget.getAttribute("x2")),
+      y: Number(hitTarget.getAttribute("y2")),
+    };
+    const hitWidth = Number(hitTarget.getAttribute("stroke-width"));
+    if (![start.x, start.y, end.x, end.y, hitWidth].every(Number.isFinite)) {
+      continue;
+    }
+    const distance = getStubHitDistance(point, start, end);
+    if (distance === null || distance > hitWidth / 2) {
+      continue;
+    }
+    const priority = getVisibleStubHitPriority(control, point);
+    if (
+      priority < closestPriority ||
+      (priority === closestPriority && distance >= closestDistance)
+    ) {
+      continue;
+    }
+    closestControl = control;
+    closestDistance = distance;
+    closestPriority = priority;
+  }
+  return closestControl;
+}
+
+function canSelectMovementStub(): boolean {
+  return !mapViewerActive &&
+    Boolean(state && !state.completed) &&
+    !hud.isGameplayOverlayOpen() &&
+    lineRevealAnimation === null &&
+    cameraPanAnimation === null;
+}
+
+function getVisibleStubHitPriority(control: SVGGElement, point: Point): number {
+  if (control.classList.contains("direction-stub-hovered")) {
+    const arrowHead = control.querySelector<SVGPolygonElement>(".direction-stub-arrowhead");
+    const points = arrowHead?.points;
+    if (points) {
+      const polygon = Array.from(points).map((candidate) => ({
+        x: candidate.x,
+        y: candidate.y,
+      }));
+      if (isPointInPolygon(point, polygon)) {
+        return 2;
+      }
+    }
   }
 
-  if (!forceAttempt && lastHeldMoveAttemptDirection === mouseIntent.direction) {
-    return;
+  const visibleLine = control.querySelector<SVGLineElement>(".direction-stub");
+  if (visibleLine) {
+    const lineStart = {
+      x: Number(visibleLine.getAttribute("x1")),
+      y: Number(visibleLine.getAttribute("y1")),
+    };
+    const lineEnd = {
+      x: Number(visibleLine.getAttribute("x2")),
+      y: Number(visibleLine.getAttribute("y2")),
+    };
+    const lineWidth = Number(visibleLine.getAttribute("stroke-width"));
+    const lineDistance = getStubHitDistance(point, lineStart, lineEnd);
+    if (lineDistance !== null && lineDistance <= lineWidth / 2) {
+      return 1;
+    }
   }
 
-  lastHeldMoveAttemptDirection = mouseIntent.direction;
-  heldMoveConsumed = attemptMoveFromCurrentIntent(now);
+  return 0;
+}
+
+function setHoveredMoveStub(stub: SVGGElement | null): void {
+  if (hoveredMoveStub === stub) {
+    return;
+  }
+  hoveredMoveStub?.classList.remove("direction-stub-hovered");
+  hoveredMoveStub = stub;
+  hoveredMoveStub?.classList.add("direction-stub-hovered");
+}
+
+function rememberMousePoint(event: PointerEvent): void {
+  if (event.pointerType === "mouse") {
+    lastMousePoint = { x: event.clientX, y: event.clientY };
+  }
+}
+
+function refreshHoveredMoveStub(): void {
+  if (!lastMousePoint || !canSelectMovementStub()) {
+    setHoveredMoveStub(null);
+    return;
+  }
+  setHoveredMoveStub(getDirectionStubControlAtPoint(lastMousePoint.x, lastMousePoint.y));
+}
+
+function getStubMovementDirection(stub: SVGGElement | null): MovementDirection | null {
+  const direction = stub?.dataset.movementDirection;
+  return MOVEMENT_DIRECTIONS.find((candidate) => candidate === direction) ?? null;
+}
+
+function selectMoveStub(stub: SVGGElement): void {
+  const direction = getStubMovementDirection(stub);
+  if (!direction) {
+    return;
+  }
+  selectedMoveStub?.classList.remove("direction-stub-selected");
+  selectedMoveStub = stub;
+  moveSelection = dragStubSelection(moveSelection, moveSelection.pointerId ?? -1, direction);
+  selectedMoveStub.classList.add("direction-stub-selected");
+}
+
+function cancelMovePointerSelection(): void {
+  const pointerId = moveSelection.pointerId;
+  selectedMoveStub?.classList.remove("direction-stub-selected");
+  selectedMoveStub = null;
+  setHoveredMoveStub(null);
+  moveSelection = createStubSelectionState();
+  if (pointerId !== null && renderer.svg.hasPointerCapture(pointerId)) {
+    renderer.svg.releasePointerCapture(pointerId);
+  }
 }
 
 renderer.svg.addEventListener("wheel", (event) => {
@@ -619,25 +842,39 @@ renderer.svg.addEventListener("wheel", (event) => {
   }
 
   event.preventDefault();
-  renderer.zoomByWheel(event.deltaY);
+  renderer.zoomByWheel(event.deltaY, { x: event.clientX, y: event.clientY });
   render();
 }, { passive: false });
 
 renderer.svg.addEventListener("pointerdown", (event) => {
+  rememberMousePoint(event);
   if (event.button !== 0) {
     return;
   }
 
-  if (state && !state.completed) {
-    activeMovePointerId = event.pointerId;
-    heldMoveConsumed = false;
-    lastHeldMoveAttemptDirection = null;
-    pointerPoint = { x: event.clientX, y: event.clientY };
-    mouseIntent = updateMouseIntent(mouseIntent, pointerPoint, performance.now());
+  if (event.pointerType === "touch" && canPanAndZoom()) {
+    mapTouchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    renderer.svg.setPointerCapture(event.pointerId);
+    if (mapTouchPoints.size >= 2) {
+      mapPinchGesture = getPinchGesture(mapTouchPoints);
+      panPointerId = null;
+      lastPanPoint = null;
+    } else {
+      panPointerId = event.pointerId;
+      lastPanPoint = { x: event.clientX, y: event.clientY };
+    }
+    renderer.svg.classList.add("tube-map-panning");
+    event.preventDefault();
+    return;
+  }
+
+  const stub = getDirectionStubControlAtPoint(event.clientX, event.clientY);
+  const direction = getStubMovementDirection(stub);
+  if (stub && direction && canSelectMovementStub()) {
+    moveSelection = beginStubSelection(event.pointerId, direction);
+    selectMoveStub(stub);
     renderer.svg.setPointerCapture(event.pointerId);
     event.preventDefault();
-    tryHeldPointerMove(performance.now(), true);
-    render();
     return;
   }
 
@@ -668,26 +905,73 @@ function endPan(event: PointerEvent): void {
   renderer.svg.classList.remove("tube-map-panning");
 }
 
-function endMovePointer(event: PointerEvent): void {
-  if (activeMovePointerId !== event.pointerId) {
-    return;
+function endMapTouchPointer(event: PointerEvent): boolean {
+  if (event.pointerType !== "touch" || !mapTouchPoints.delete(event.pointerId)) {
+    return false;
   }
-
   if (renderer.svg.hasPointerCapture(event.pointerId)) {
     renderer.svg.releasePointerCapture(event.pointerId);
   }
-  activeMovePointerId = null;
-  heldMoveConsumed = false;
-  lastHeldMoveAttemptDirection = null;
+  const remainingTouch = mapTouchPoints.entries().next().value as [number, Point] | undefined;
+  mapPinchGesture = null;
+  if (remainingTouch) {
+    panPointerId = remainingTouch[0];
+    lastPanPoint = remainingTouch[1];
+  } else {
+    panPointerId = null;
+    lastPanPoint = null;
+    renderer.svg.classList.remove("tube-map-panning");
+  }
+  return true;
+}
+
+function resetMapTouchGesture(): void {
+  for (const pointerId of mapTouchPoints.keys()) {
+    if (renderer.svg.hasPointerCapture(pointerId)) {
+      renderer.svg.releasePointerCapture(pointerId);
+    }
+  }
+  mapTouchPoints.clear();
+  mapPinchGesture = null;
+}
+
+function endMovePointer(event: PointerEvent, moveOnRelease: boolean): void {
+  if (moveSelection.pointerId !== event.pointerId) {
+    return;
+  }
+
+  const releasedSelection = releaseStubSelection(moveSelection, event.pointerId);
+  const direction = releasedSelection.direction;
+  cancelMovePointerSelection();
+  if (moveOnRelease && direction) {
+    attemptMoveFromStub(direction, performance.now());
+    render();
+  }
 }
 
 renderer.svg.addEventListener("pointerup", (event) => {
-  endMovePointer(event);
+  endMapTouchPointer(event);
+  endMovePointer(event, true);
   endPan(event);
 });
 renderer.svg.addEventListener("pointercancel", (event) => {
-  endMovePointer(event);
+  endMapTouchPointer(event);
+  endMovePointer(event, false);
   endPan(event);
+});
+
+renderer.svg.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+  const stub = getDirectionStubControl(event.target);
+  const direction = getStubMovementDirection(stub);
+  if (!direction || !canSelectMovementStub()) {
+    return;
+  }
+  event.preventDefault();
+  attemptMoveFromStub(direction, performance.now());
+  render();
 });
 
 render();

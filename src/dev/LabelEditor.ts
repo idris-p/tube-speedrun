@@ -6,7 +6,6 @@ import { renderRevealedLine } from "../rendering/lineRenderer";
 import {
   getDirectionStubStart,
   getDirectionStubUnit,
-  getStubArrowHeadPoints,
   groupConnectionsByRenderedPath,
 } from "../rendering/mapRenderer";
 import { CorridorLayout } from "../rendering/corridorLayout";
@@ -24,7 +23,6 @@ import {
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MAP_PADDING = GRID_CELL_SIZE * 4;
 const STUB_LENGTH = 40;
-const STUB_ARROW_LENGTH = 11;
 const INITIAL_VIEWBOX_WIDTH = 1_700;
 const MIN_ZOOM = 0.15;
 const MAX_ZOOM = 80;
@@ -34,7 +32,6 @@ const STORAGE_KEY = "tube-speedrun.label-editor.offsets";
 const LABEL_OBSTACLE_SELECTOR = [
   ".map-line",
   ".label-editor-direction-stub",
-  ".label-editor-direction-stub-arrow",
   ".interchange-marker",
   ".station-bar-marker",
   ".conjoined-station-link",
@@ -344,41 +341,25 @@ export class LabelEditor {
         const unit = getDirectionStubUnit(connection, stationId);
         if (!unit) continue;
         const linePoint = this.layout.getStationLinePoint(stationId, connection.line);
-        const markerPoints = this.layout.getStationMarkerGroups(stationId).map((group) => group.point);
-        const start = getDirectionStubStart(markerPoints, linePoint, unit);
+        const markerGroups = this.layout.getStationMarkerGroups(stationId);
+        const start = getDirectionStubStart(markerGroups, connection.line, linePoint);
         const key = `${stationId}:${connection.line}:${unit.x}:${unit.y}:${start.x}:${start.y}`;
         if (rendered.has(key)) continue;
         rendered.add(key);
-        const normal = { x: -unit.y, y: unit.x };
         const end = {
           x: start.x + unit.x * STUB_LENGTH,
           y: start.y + unit.y * STUB_LENGTH,
         };
-        const lineEnd = {
-          x: end.x - unit.x * STUB_ARROW_LENGTH,
-          y: end.y - unit.y * STUB_ARROW_LENGTH,
-        };
         const line = document.createElementNS(SVG_NS, "line");
         line.setAttribute("x1", String(start.x));
         line.setAttribute("y1", String(start.y));
-        line.setAttribute("x2", String(lineEnd.x));
-        line.setAttribute("y2", String(lineEnd.y));
+        line.setAttribute("x2", String(end.x));
+        line.setAttribute("y2", String(end.y));
         line.setAttribute("stroke", LINE_BY_ID[connection.line].color);
         line.setAttribute("stroke-width", String(STUB_STROKE_WIDTH));
         line.setAttribute("class", "label-editor-direction-stub");
         if (connection.line === "walk") line.setAttribute("stroke-dasharray", "8 6");
         layer.append(line);
-
-        const arrow = document.createElementNS(SVG_NS, "polygon");
-        arrow.setAttribute(
-          "points",
-          getStubArrowHeadPoints(end, unit, normal)
-            .map((point) => `${point.x},${point.y}`)
-            .join(" "),
-        );
-        arrow.setAttribute("fill", LINE_BY_ID[connection.line].color);
-        arrow.setAttribute("class", "label-editor-direction-stub-arrow");
-        layer.append(arrow);
       }
     }
   }
