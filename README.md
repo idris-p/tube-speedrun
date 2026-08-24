@@ -4,15 +4,12 @@ A speedrunning game where you traverse the London Underground (and Elizabeth lin
 
 ## Screenshots
 
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/bdc989d1-222d-498f-92a2-8a3ed9a3f479" />
-
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/398e1c9e-a606-4edd-a5bd-0e93d68fecaf" />
-
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/f849125a-8749-48ef-abfa-51bef1314db8" />
-
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/f0f945e5-4ffb-47f8-bf77-d31b15ab02e3" />
-
+<img width="1920" height="1080" alt="Screenshot 2026-07-31 184930" src="https://github.com/user-attachments/assets/e6173e97-9c64-4a63-8f0e-185cdf38d324" />
+<img width="1920" height="1080" alt="Screenshot 2026-07-31 185053" src="https://github.com/user-attachments/assets/f275e820-da9c-49a5-b52b-149c66676629" />
+<img width="1920" height="1080" alt="Screenshot 2026-07-31 185154" src="https://github.com/user-attachments/assets/f33c5b37-5e45-49d2-a299-8c9570afa70a" />
+<img width="1920" height="1080" alt="Screenshot 2026-07-31 185729" src="https://github.com/user-attachments/assets/49b1995d-2c9b-4901-960f-df79861e393c" />
 <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/1251205e-1423-47f2-bdc6-4bc051b454e5" />
+<img width="1920" height="1080" alt="Screenshot 2026-07-31 185019" src="https://github.com/user-attachments/assets/0cfdb93b-1f3f-4140-9e0f-9f0a8a7b6394" />
 
 ## Gameplay
 
