@@ -3,6 +3,7 @@ import { renderDirectionStub } from "../rendering/directionStubRenderer";
 import { gridPointToSvgPoint } from "../rendering/grid";
 import { getDirectionStubRenderLength } from "../rendering/mapRenderer";
 import { renderStationMarker } from "../rendering/stationRenderer";
+import { createTriangleIcon, type TriangleIconDirection } from "./triangleIcon";
 import { createHudMetric, renderTimeValue } from "./hudMetric";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -43,9 +44,9 @@ export function createHowToPlayContent(): HTMLElement {
   viewport.className = "how-to-play-viewport";
   viewport.append(list);
 
-  const previousButton = carouselButton("\u25c0", "Previous instruction");
+  const previousButton = carouselButton("previous", "Previous instruction");
   previousButton.classList.add("how-to-play-previous");
-  const nextButton = carouselButton("\u25b6", "Next instruction");
+  const nextButton = carouselButton("next", "Next instruction");
   nextButton.classList.add("how-to-play-next");
 
   const dots = document.createElement("div");
@@ -101,12 +102,12 @@ export function createHowToPlayContent(): HTMLElement {
   return carousel;
 }
 
-function carouselButton(label: string, ariaLabel: string): HTMLButtonElement {
+function carouselButton(direction: TriangleIconDirection, ariaLabel: string): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "how-to-play-arrow";
-  button.textContent = label;
   button.ariaLabel = ariaLabel;
+  button.append(createTriangleIcon(direction));
   return button;
 }
 

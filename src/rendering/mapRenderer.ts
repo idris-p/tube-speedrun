@@ -692,6 +692,10 @@ export class MapRenderer {
       }
 
       const linePoint = this.corridorLayout.getStationLinePoint(stationId, connection.line);
+      const routePoints = getDirectionStubRoutePoints(
+        this.corridorLayout.getConnectionCameraPoints(connection),
+        linePoint,
+      );
       const start = getDirectionStubStart(
         this.corridorLayout.getStationMarkerGroups(stationId),
         connection.line,
@@ -706,6 +710,7 @@ export class MapRenderer {
           key: `${unit.x},${unit.y}|${start.x},${start.y}`,
           start,
           linePoint,
+          routePoints,
           unit,
           normal: { x: -unit.y, y: unit.x },
         },
@@ -750,6 +755,7 @@ export class MapRenderer {
         start: stub.start,
         unit: stub.unit,
         normal: stub.normal,
+        routePoints: stub.routePoints,
         offset,
         length: getDirectionStubRenderLength(interchange),
         hitStartInset: getDirectionStubHitStartInset(interchange),
@@ -1270,6 +1276,11 @@ export function getDirectionStubStart(
   linePoint: Point,
 ): Point {
   return markerGroups.find((group) => group.lines.includes(lineId))?.point ?? linePoint;
+}
+
+export function getDirectionStubRoutePoints(points: Point[], linePoint: Point): Point[] {
+  if (points.length < 2) return points;
+  return isCloserToPoint(points[0], linePoint, points.at(-1)!) ? points : [...points].reverse();
 }
 
 function snapUnitComponent(value: number): number {

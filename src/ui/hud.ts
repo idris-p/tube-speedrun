@@ -16,6 +16,7 @@ import {
 } from "../rendering/stationRenderer";
 import { createHowToPlayContent } from "./howToPlay";
 import { createHudMetric, renderTimeValue } from "./hudMetric";
+import { createTriangleIcon } from "./triangleIcon";
 
 export type HudCallbacks = {
   onStartRandomSeed: () => void;
@@ -166,7 +167,7 @@ export class Hud {
     this.menuBackButton = document.createElement("button");
     this.menuBackButton.type = "button";
     this.menuBackButton.className = "menu-back";
-    this.menuBackButton.textContent = "\u25c0 Back";
+    this.menuBackButton.append(createTriangleIcon("previous"), "Back");
     this.menuBackButton.addEventListener("click", () => {
       if (this.gameplayHelpOpen) {
         this.closeGameplayHelp();
@@ -1507,10 +1508,7 @@ function lineCycleButton(
   button.ariaLabel = isPrevious ? "Select previous line (A)" : "Select next line (D)";
   button.title = button.ariaLabel;
 
-  const icon = document.createElement("span");
-  icon.className = `line-cycle-icon line-cycle-icon-${isPrevious ? "previous" : "next"}`;
-  icon.setAttribute("aria-hidden", "true");
-  button.append(icon);
+  button.append(createTriangleIcon(isPrevious ? "previous" : "next"));
   button.addEventListener("click", () => callback(direction));
   return button;
 }

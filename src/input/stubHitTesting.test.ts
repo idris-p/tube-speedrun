@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getStubHitDistance, isPointInPolygon } from "./stubHitTesting";
+import { getStubHitDistance, getStubPathHitDistance, isPointInPolygon } from "./stubHitTesting";
 
 describe("direction stub hit testing", () => {
   it("chooses the centreline closest to the pointer when hit areas overlap", () => {
@@ -16,6 +16,17 @@ describe("direction stub hit testing", () => {
 
     expect(getStubHitDistance(pointOnEastStub, { x: 16, y: 0 }, { x: 58, y: 0 })).toBe(0);
     expect(getStubHitDistance(pointOnEastStub, { x: -16, y: 0 }, { x: -58, y: 0 })).toBeNull();
+  });
+
+  it("measures against each section of a curved stub path", () => {
+    const path = [
+      { x: 0, y: 0 },
+      { x: 20, y: 0 },
+      { x: 30, y: 10 },
+    ];
+
+    expect(getStubPathHitDistance({ x: 25, y: 5 }, path)).toBe(0);
+    expect(getStubPathHitDistance({ x: 25, y: 0 }, path)).toBeCloseTo(Math.sqrt(12.5));
   });
 
   it("recognises clicks inside a visible arrowhead wing", () => {

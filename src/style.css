@@ -1380,7 +1380,7 @@ svg text {
   height: 54px;
   border: 2px solid #111111;
   border-radius: 8px;
-  padding: 0 0 3px;
+  padding: 0;
   background: #ffffff;
   color: #111111;
   font-size: 28px;
@@ -1629,6 +1629,10 @@ svg text {
   position: absolute;
   top: 18px;
   left: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   min-width: 96px;
   height: 44px;
   padding: 0 14px;
@@ -1637,6 +1641,10 @@ svg text {
   font-size: 18px;
   font-weight: 850;
   pointer-events: auto;
+}
+
+.menu-back[hidden] {
+  display: none;
 }
 
 .main-menu-button {
@@ -2449,7 +2457,7 @@ svg text {
   .main-menu h1 {
     font-size: 60px;
     -webkit-text-stroke-width: 4px;
-    text-shadow: 0 6px 14px rgba(0, 0, 0, 0.1);
+    text-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
   }
 
   .main-menu-actions,
@@ -2495,6 +2503,10 @@ svg text {
   .main-menu-social-link .social-icon {
     width: 20px;
     height: 20px;
+  }
+
+  .countdown-value {
+    text-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
   }
 
   .results-overlay {

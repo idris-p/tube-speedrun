@@ -40,6 +40,17 @@ export function getStubHitDistance(
   return Math.hypot(point.x - closestPoint.x, point.y - closestPoint.y);
 }
 
+export function getStubPathHitDistance(point: Point, path: readonly Point[]): number | null {
+  let closestDistance: number | null = null;
+  for (let index = 1; index < path.length; index += 1) {
+    const distance = getStubHitDistance(point, path[index - 1], path[index]);
+    if (distance !== null && (closestDistance === null || distance < closestDistance)) {
+      closestDistance = distance;
+    }
+  }
+  return closestDistance;
+}
+
 export function isPointInPolygon(point: Point, polygon: readonly Point[]): boolean {
   if (polygon.length < 3) {
     return false;

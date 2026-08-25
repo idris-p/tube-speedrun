@@ -10,6 +10,7 @@ import {
   getDirectionStubStart,
   getDirectionStubHitStartInset,
   getDirectionStubRenderLength,
+  getDirectionStubRoutePoints,
   getDirectionStubUnit,
   getMapPanPadding,
   getPointAlongPolyline,
@@ -20,6 +21,10 @@ import {
   groupConnectionsByRenderedPath,
 } from "./mapRenderer";
 import { CorridorLayout } from "./corridorLayout";
+import {
+  getDirectionStubArrowEnd,
+  getDirectionStubPathPoints,
+} from "./directionStubRenderer";
 import { getOneWayArrowLineSegments } from "./lineRenderer";
 import { STUB_STROKE_WIDTH } from "./lineStyles";
 import {
@@ -58,6 +63,22 @@ describe("direction stub controls", () => {
     ).toEqual({ x: 30, y: 0 });
   });
 
+  it("keeps a straight stub arrowhead in its original position", () => {
+    expect(getDirectionStubArrowEnd(
+      [{ x: 0, y: 0 }, { x: DEFAULT_DIRECTION_STUB_LENGTH, y: 0 }],
+      { x: 1, y: 0 },
+    )).toEqual({ x: DEFAULT_DIRECTION_STUB_LENGTH, y: 0 });
+  });
+
+  it("shifts the arrowhead opposite the bend to meet the curved shaft", () => {
+    const arrowEnd = getDirectionStubArrowEnd(
+      [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: -14 }],
+      { x: 1, y: 0 },
+    );
+
+    expect(arrowEnd).toEqual({ x: DEFAULT_DIRECTION_STUB_LENGTH, y: 0 });
+  });
+
   it("makes standard-station stubs slightly longer than interchange stubs", () => {
     const standardVisibleLength =
       getDirectionStubRenderLength(false) - getDirectionStubHitStartInset(false);
@@ -81,6 +102,58 @@ describe("direction stub controls", () => {
       x: -Math.SQRT1_2,
       y: Math.SQRT1_2,
     });
+  });
+
+  it("follows bends beside Mornington Crescent while preserving stub length", () => {
+    const layout = new CorridorLayout(networkData);
+    const connection = networkData.connections.find(
+      (candidate) =>
+        candidate.line === "northern" &&
+        candidate.from === "mornington-crescent" &&
+        candidate.to === "camden-town",
+    );
+    if (!connection) throw new Error("Missing Mornington Crescent to Camden Town connection");
+    const start = layout.getStationLinePoint("mornington-crescent", "northern");
+    const unit = getDirectionStubUnit(connection, "mornington-crescent")!;
+    const points = getDirectionStubPathPoints(
+      getDirectionStubRoutePoints(layout.getConnectionCameraPoints(connection), start),
+      start,
+      unit,
+      { x: -unit.y, y: unit.x },
+      0,
+      getDirectionStubRenderLength(false),
+    );
+
+    expect(getTestPolylineLength(points)).toBeCloseTo(getDirectionStubRenderLength(false));
+    expect(points.at(-1)!.x).toBeGreaterThan(start.x);
+    expect(points.at(-1)!.y).toBeLessThan(start.y);
+  });
+
+  it("turns the Old Street stub towards Angel before positioning its arrowhead", () => {
+    const layout = new CorridorLayout(networkData);
+    const connection = networkData.connections.find(
+      (candidate) =>
+        candidate.line === "northern" &&
+        candidate.from === "old-street" &&
+        candidate.to === "angel",
+    );
+    if (!connection) throw new Error("Missing Old Street to Angel connection");
+    const start = layout.getStationLinePoint("old-street", "northern");
+    const unit = getDirectionStubUnit(connection, "old-street")!;
+    const points = getDirectionStubPathPoints(
+      getDirectionStubRoutePoints(layout.getConnectionCameraPoints(connection), start),
+      start,
+      unit,
+      { x: -unit.y, y: unit.x },
+      0,
+      getDirectionStubRenderLength(false),
+    );
+    const end = points.at(-1)!;
+    const beforeEnd = points.at(-2)!;
+    const finalDelta = { x: end.x - beforeEnd.x, y: end.y - beforeEnd.y };
+
+    expect(getTestPolylineLength(points)).toBeCloseTo(getDirectionStubRenderLength(false));
+    expect(Math.abs(finalDelta.y / finalDelta.x)).toBeLessThan(1);
   });
 
   it("anchors stubs to the marker belonging to their line regardless of travel direction", () => {
@@ -467,6 +540,16 @@ function getPolylineMidpoint(points: Point[]): Point {
     x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
     y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
   };
+}
+
+function getTestPolylineLength(points: Point[]): number {
+  return points.slice(1).reduce(
+    (total, point, index) => total + Math.hypot(
+      point.x - points[index].x,
+      point.y - points[index].y,
+    ),
+    0,
+  );
 }
 
 function getRouteDirection(

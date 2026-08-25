@@ -20,7 +20,7 @@ import {
 import { bindKeyboardControls } from "./input/keyboard";
 import { getPinchGesture, type PinchGesture } from "./input/pinchZoom";
 import {
-  getStubHitDistance,
+  getStubPathHitDistance,
   getSvgPoint,
   isPointInPolygon,
 } from "./input/stubHitTesting";
@@ -705,7 +705,7 @@ function getDirectionStubControlAtPoint(clientX: number, clientY: number): SVGGE
   for (const control of renderer.svg.querySelectorAll<SVGGElement>(
     ".direction-stub-control[data-movement-direction]",
   )) {
-    const hitTarget = control.querySelector<SVGLineElement>(".direction-stub-hit");
+    const hitTarget = control.querySelector<SVGPathElement>(".direction-stub-hit");
     if (!hitTarget) {
       continue;
     }
@@ -713,19 +713,12 @@ function getDirectionStubControlAtPoint(clientX: number, clientY: number): SVGGE
     if (!point) {
       continue;
     }
-    const start = {
-      x: Number(hitTarget.getAttribute("x1")),
-      y: Number(hitTarget.getAttribute("y1")),
-    };
-    const end = {
-      x: Number(hitTarget.getAttribute("x2")),
-      y: Number(hitTarget.getAttribute("y2")),
-    };
+    const hitPath = getRenderedStubPathPoints(hitTarget);
     const hitWidth = Number(hitTarget.getAttribute("stroke-width"));
-    if (![start.x, start.y, end.x, end.y, hitWidth].every(Number.isFinite)) {
+    if (hitPath.length < 2 || !Number.isFinite(hitWidth)) {
       continue;
     }
-    const distance = getStubHitDistance(point, start, end);
+    const distance = getStubPathHitDistance(point, hitPath);
     if (distance === null || distance > hitWidth / 2) {
       continue;
     }
@@ -766,24 +759,27 @@ function getVisibleStubHitPriority(control: SVGGElement, point: Point): number {
     }
   }
 
-  const visibleLine = control.querySelector<SVGLineElement>(".direction-stub");
+  const visibleLine = control.querySelector<SVGPathElement>(".direction-stub");
   if (visibleLine) {
-    const lineStart = {
-      x: Number(visibleLine.getAttribute("x1")),
-      y: Number(visibleLine.getAttribute("y1")),
-    };
-    const lineEnd = {
-      x: Number(visibleLine.getAttribute("x2")),
-      y: Number(visibleLine.getAttribute("y2")),
-    };
+    const linePath = getRenderedStubPathPoints(visibleLine);
     const lineWidth = Number(visibleLine.getAttribute("stroke-width"));
-    const lineDistance = getStubHitDistance(point, lineStart, lineEnd);
+    const lineDistance = getStubPathHitDistance(point, linePath);
     if (lineDistance !== null && lineDistance <= lineWidth / 2) {
       return 1;
     }
   }
 
   return 0;
+}
+
+function getRenderedStubPathPoints(path: SVGPathElement): Point[] {
+  const serialized = path.dataset.pathPoints;
+  if (!serialized) return [];
+  const points = serialized.split(" ").map((value) => {
+    const [x, y] = value.split(",").map(Number);
+    return { x, y };
+  });
+  return points.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y)) ? points : [];
 }
 
 function setHoveredMoveStub(stub: SVGGElement | null): void {
