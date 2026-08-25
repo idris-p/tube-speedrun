@@ -55,114 +55,6 @@ svg text {
   -webkit-user-select: text;
 }
 
-.portrait-orientation-overlay {
-  display: none;
-}
-
-@media (any-pointer: coarse) and (orientation: portrait) {
-  .app-shell > :not(.map-host):not(.portrait-orientation-overlay) {
-    visibility: hidden;
-    pointer-events: none;
-  }
-
-  .app-shell > .map-host {
-    opacity: 0.3;
-    pointer-events: none;
-  }
-
-  .portrait-orientation-overlay {
-    position: absolute;
-    z-index: 100;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    padding:
-      max(24px, env(safe-area-inset-top))
-      max(24px, env(safe-area-inset-right))
-      max(24px, env(safe-area-inset-bottom))
-      max(24px, env(safe-area-inset-left));
-    background: transparent;
-    touch-action: none;
-  }
-
-  .portrait-orientation-prompt {
-    display: grid;
-    justify-items: center;
-    gap: 10px;
-    width: min(360px, 100%);
-    border: 3px solid #111111;
-    border-radius: 14px;
-    padding: 24px;
-    background: rgba(255, 255, 255, 0.96);
-    box-shadow: 0 6px 0 #111111;
-    color: #111111;
-    text-align: center;
-  }
-
-  .portrait-orientation-icon {
-    width: clamp(116px, 22vmin, 144px);
-    height: auto;
-    overflow: visible;
-  }
-
-  .portrait-orientation-phone {
-    transform-box: fill-box;
-    transform-origin: center;
-    animation: portrait-device-turn 2.4s ease-in-out infinite;
-  }
-
-  .portrait-orientation-phone rect {
-    fill: #ffffff;
-    stroke: #111111;
-    stroke-width: 6px;
-  }
-
-  .portrait-orientation-phone line,
-  .portrait-orientation-turn {
-    fill: none;
-    stroke: #111111;
-  }
-
-  .portrait-orientation-phone line {
-    stroke-width: 4px;
-    stroke-linecap: round;
-  }
-
-  .portrait-orientation-turn {
-    stroke-width: 10px;
-    stroke-linecap: butt;
-  }
-
-  .portrait-orientation-arrowhead {
-    fill: #111111;
-  }
-
-  .portrait-orientation-prompt strong {
-    font-size: clamp(25px, 6vmin, 34px);
-    font-weight: 900;
-    line-height: 1;
-  }
-
-  .portrait-orientation-prompt span {
-    font-size: clamp(15px, 3.5vmin, 19px);
-    font-weight: 700;
-    line-height: 1.25;
-  }
-}
-
-@keyframes portrait-device-turn {
-  0%,
-  15%,
-  100% {
-    transform: rotate(0deg);
-  }
-
-  55%,
-  75% {
-    transform: rotate(90deg);
-  }
-}
-
 .map-host {
   position: absolute;
   inset: 0;
@@ -899,7 +791,7 @@ svg text {
 }
 
 .gameplay-help-button {
-  right: calc(var(--gameplay-ui-inset) + var(--gameplay-control-size) + var(--gameplay-control-gap));
+  right: var(--gameplay-ui-inset);
   padding-bottom: 2px;
   font-size: 28px;
   font-weight: 900;
@@ -907,6 +799,7 @@ svg text {
 }
 
 .gameplay-map-button {
+  top: calc(var(--gameplay-ui-inset) + var(--gameplay-control-size) + var(--gameplay-control-gap));
   right: var(--gameplay-ui-inset);
 }
 
@@ -973,6 +866,10 @@ svg text {
   z-index: 46;
   top: 18px;
   left: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   height: 46px;
   border: 2px solid #111111;
   border-radius: 8px;
@@ -1699,6 +1596,10 @@ svg text {
   position: absolute;
   top: 18px;
   left: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   height: 46px;
   border: 2px solid #111111;
   border-radius: 8px;
@@ -2130,7 +2031,7 @@ svg text {
   }
 }
 
-@media (any-pointer: coarse) and (orientation: landscape) and (max-width: 1400px) {
+@media (hover: none) and (pointer: coarse) and (orientation: landscape) and (max-width: 1400px) {
   :root {
     --touch-line-control-span: min(
       calc(
@@ -2199,12 +2100,9 @@ svg text {
     height: var(--gameplay-control-size);
   }
 
-  .gameplay-help-button {
-    right: calc(var(--gameplay-ui-inset) + var(--gameplay-control-size) + var(--gameplay-control-gap));
-  }
 }
 
-@media (any-pointer: coarse) and (orientation: landscape) and (min-height: 501px) and (max-width: 1400px) {
+@media (hover: none) and (pointer: coarse) and (orientation: landscape) and (min-height: 501px) and (max-width: 1400px) {
   :root {
     --gameplay-ui-inset: clamp(18px, 2.1vmin, 22px);
     --gameplay-control-size: clamp(60px, 7vmin, 72px);
@@ -2326,7 +2224,7 @@ svg text {
   }
 }
 
-@media (any-pointer: coarse) and (orientation: landscape) and (max-height: 500px) and (max-width: 1400px) {
+@media (hover: none) and (pointer: coarse) and (orientation: landscape) and (max-height: 500px) and (max-width: 1400px) {
   :root {
     --gameplay-ui-inset: 10px;
     --gameplay-control-size: 44px;
@@ -2355,6 +2253,14 @@ svg text {
   }
 
   .line-indicator {
+    width: min(
+      520px,
+      calc(
+        100vw - var(--touch-safe-left) - var(--touch-safe-right) -
+          var(--gameplay-control-size) - var(--gameplay-control-size) -
+          var(--gameplay-control-gap) - var(--gameplay-control-gap)
+      )
+    );
     padding: 5px;
     gap: 3px;
   }
@@ -2587,24 +2493,1016 @@ svg text {
     transform-origin: center;
   }
 
+  .completion-overlay:not([hidden]) ~ .gameplay-exit-button {
+    display: none;
+  }
+
   .completion-stats {
     grid-template-columns: minmax(190px, 1.35fr) repeat(2, minmax(120px, 0.8fr));
   }
 }
 
-@media (any-pointer: coarse) and (orientation: landscape) and (max-height: 500px) and (max-width: 640px) {
+@media (hover: none) and (pointer: coarse) and (orientation: landscape) and (max-height: 500px) and (max-width: 640px) {
   :root {
     --iphone-hud-scale: 0.64;
     --iphone-completion-scale: 0.7;
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .portrait-orientation-phone {
-    animation: none;
-    transform: rotate(90deg);
+@media (hover: none) and (pointer: coarse) {
+  :root {
+    --touch-gutter: clamp(12px, 2.2vmin, 22px);
+    --touch-safe-top: max(
+      var(--touch-gutter),
+      calc(env(safe-area-inset-top, 0px) + 10px)
+    );
+    --touch-safe-right: max(
+      var(--touch-gutter),
+      calc(env(safe-area-inset-right, 0px) + 10px)
+    );
+    --touch-safe-bottom: max(
+      var(--touch-gutter),
+      calc(env(safe-area-inset-bottom, 0px) + 10px)
+    );
+    --touch-safe-left: max(
+      var(--touch-gutter),
+      calc(env(safe-area-inset-left, 0px) + 10px)
+    );
   }
 
+  body {
+    min-height: 100dvh;
+    overscroll-behavior: none;
+  }
+
+  .app-shell {
+    height: 100dvh;
+  }
+
+  .main-menu h1,
+  .countdown-value {
+    text-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
+  }
+
+  .line-cycle-controls {
+    display: none !important;
+  }
+
+  .zoom-controls,
+  .gameplay-map-zoom {
+    display: none;
+  }
+
+  .line-indicator {
+    top: var(--touch-safe-top);
+    padding-right: clamp(8px, 1.4vmin, 12px);
+    padding-left: clamp(8px, 1.4vmin, 12px);
+  }
+
+  .line-chip {
+    padding-right: clamp(6px, 1vmin, 10px);
+    padding-left: clamp(6px, 1vmin, 10px);
+  }
+
+  .line-chip-preview .line-chip-key,
+  .line-chip-disabled .line-chip-key {
+    display: none;
+  }
+
+  .gameplay-exit-button,
+  .gameplay-help-button {
+    top: var(--touch-safe-top);
+  }
+
+  .gameplay-exit-button {
+    left: var(--touch-safe-left);
+  }
+
+  .gameplay-help-button,
+  .gameplay-map-button {
+    right: var(--touch-safe-right);
+  }
+
+  .gameplay-map-button {
+    top: calc(var(--touch-safe-top) + var(--gameplay-control-size) + var(--gameplay-control-gap));
+  }
+
+  .dismissed-round-action {
+    top: calc(
+      var(--touch-safe-top) + var(--gameplay-control-size) + var(--gameplay-control-gap)
+    );
+    left: auto;
+    right: var(--touch-safe-right);
+    transform: none;
+  }
+
+  .dismissed-round-action:active {
+    transform: translateY(4px);
+  }
+
+  .exit-confirm-overlay {
+    padding:
+      calc(var(--touch-safe-top) + var(--gameplay-control-size) + var(--gameplay-control-gap))
+      var(--touch-safe-right)
+      var(--touch-safe-bottom)
+      var(--touch-safe-left);
+  }
+
+  .completion-overlay {
+    max-height: calc(100dvh - var(--touch-safe-top) - var(--touch-safe-bottom));
+  }
+
+  .results-overlay {
+    max-height: 100dvh;
+    padding:
+      calc(var(--touch-safe-top) + 52px)
+      var(--touch-safe-right)
+      var(--touch-safe-bottom)
+      var(--touch-safe-left);
+    overflow-y: auto;
+  }
+
+  .results-nav-button {
+    top: var(--touch-safe-top);
+  }
+
+  .results-exit {
+    left: var(--touch-safe-left);
+  }
+
+  .results-play-again {
+    right: var(--touch-safe-right);
+  }
+
+  .main-menu {
+    padding:
+      var(--touch-safe-top)
+      var(--touch-safe-right)
+      var(--touch-safe-bottom)
+      var(--touch-safe-left);
+  }
+
+  .menu-back,
+  .map-viewer-back {
+    top: var(--touch-safe-top);
+    left: var(--touch-safe-left);
+  }
+
+  .main-menu-social-links {
+    right: var(--touch-safe-right);
+    bottom: var(--touch-safe-bottom);
+  }
+
+  .map-search-form {
+    bottom: var(--touch-safe-bottom);
+  }
+
+  .map-viewer-active .zoom-controls {
+    right: var(--touch-safe-right);
+    bottom: calc(var(--touch-safe-bottom) + 70px);
+  }
+
+  .gameplay-map-overlay {
+    padding:
+      var(--touch-safe-top)
+      var(--touch-safe-right)
+      var(--touch-safe-bottom)
+      var(--touch-safe-left);
+  }
+
+  .gameplay-map-dialog {
+    max-width: 100%;
+    max-height: 100%;
+  }
+
+  .tube-map-running {
+    -webkit-touch-callout: none;
+  }
+
+  .tube-map-running .direction-stub-control,
+  .tube-map-running .direction-stub-control:focus-visible,
+  .tube-map-running .direction-stub-hovered,
+  .tube-map-running .direction-stub-selected {
+    cursor: default;
+    pointer-events: none;
+    transform: none !important;
+    transition: none;
+  }
+
+  .tube-map-running .direction-stub-hit {
+    pointer-events: none;
+  }
+
+  .tube-map-running .direction-stub-arrowhead {
+    opacity: 0 !important;
+    transition: none;
+  }
+}
+
+/* Tablet foundation shared by both supported orientations. */
+@media (hover: none) and (pointer: coarse) and (min-width: 601px) and (min-height: 560px) and (max-width: 1400px) {
+  :root {
+    --gameplay-control-size: clamp(56px, 7vmin, 68px);
+    --gameplay-control-gap: clamp(10px, 1.4vmin, 14px);
+    --gameplay-hud-height: clamp(70px, 8.5vmin, 86px);
+  }
+
+  .gameplay-exit-button,
+  .gameplay-help-button,
+  .gameplay-map-button {
+    width: var(--gameplay-control-size);
+    height: var(--gameplay-control-size);
+  }
+
+  .gameplay-help-button {
+    font-size: clamp(28px, 3.5vmin, 36px);
+  }
+
+  .gameplay-exit-button .button-icon,
+  .gameplay-map-button .button-icon {
+    width: clamp(26px, 3.2vmin, 34px);
+    height: clamp(26px, 3.2vmin, 34px);
+  }
+
+  .line-indicator {
+    padding-right: clamp(10px, 1.4vmin, 14px);
+    padding-left: clamp(10px, 1.4vmin, 14px);
+  }
+
+  .line-chip {
+    padding-right: clamp(8px, 1.1vmin, 11px);
+    padding-left: clamp(8px, 1.1vmin, 11px);
+  }
+
+  .line-chip-current .line-chip-key {
+    min-width: auto;
+    padding-right: clamp(8px, 1.1vmin, 11px);
+    padding-left: clamp(8px, 1.1vmin, 11px);
+  }
+
+  .completion-overlay {
+    width: min(760px, calc(100vw - var(--touch-safe-left) - var(--touch-safe-right)));
+  }
+
+  .results-panel {
+    width: min(920px, calc(100vw - var(--touch-safe-left) - var(--touch-safe-right)));
+  }
+
+  .gameplay-map-dialog {
+    width: min(1120px, calc(100vw - var(--touch-safe-left) - var(--touch-safe-right)));
+    height: min(780px, calc(100dvh - var(--touch-safe-top) - var(--touch-safe-bottom)));
+  }
+}
+
+/* Tablet landscape keeps the established desktop composition with fluid, safe-edge spacing. */
+@media (hover: none) and (pointer: coarse) and (orientation: landscape) and (min-height: 560px) and (max-width: 1400px) {
+  .line-indicator {
+    left: 50%;
+    right: auto;
+    width: min(
+      620px,
+      calc(
+        100vw - var(--touch-safe-left) - var(--touch-safe-right) -
+        var(--gameplay-control-size) - var(--gameplay-control-size) - 32px
+      )
+    );
+    transform: translateX(-50%);
+  }
+
+  .hud-left,
+  .hud-timer {
+    bottom: var(--touch-safe-bottom);
+    min-height: var(--gameplay-hud-height);
+    transform: none;
+  }
+
+  .hud-left {
+    left: var(--touch-safe-left);
+    width: min(48vw, 510px);
+  }
+
+  .hud-timer {
+    right: var(--touch-safe-right);
+    width: min(42vw, 450px);
+  }
+
+  .main-menu-content {
+    top: 50%;
+    gap: clamp(58px, 7dvh, 84px);
+    transform: translate(-50%, -50%);
+  }
+
+  .main-menu[data-menu-mode="how-to-play"] .main-menu-content {
+    gap: 0;
+    transform: translate(-50%, -50%) scale(var(--how-to-play-scale));
+  }
+}
+
+/* Tablet portrait restructures the HUD and tutorial instead of shrinking landscape UI. */
+@media (hover: none) and (pointer: coarse) and (orientation: portrait) and (min-width: 601px) and (max-width: 1400px) {
+  :root {
+    --tablet-portrait-hud-half-gap: clamp(5px, 0.75vmin, 7px);
+  }
+
+  .line-indicator {
+    left: calc(var(--touch-safe-left) + var(--gameplay-control-size) + var(--gameplay-control-gap));
+    right: calc(var(--touch-safe-right) + var(--gameplay-control-size) + var(--gameplay-control-gap));
+    width: auto;
+    height: var(--gameplay-control-size);
+    max-width: none;
+    transform: none;
+  }
+
+  .line-chip-preview,
+  .line-chip-disabled {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .line-indicator,
+  .line-chip-name {
+    font-size: clamp(12px, 1.8vmin, 15px);
+  }
+
+  .hud-left,
+  .hud-timer {
+    bottom: var(--touch-safe-bottom);
+    width: auto;
+    max-width: none;
+    min-height: var(--gameplay-hud-height);
+    gap: clamp(5px, 0.9vmin, 9px);
+    padding: clamp(9px, 1.4vmin, 13px);
+    transform: none;
+  }
+
+  .hud-left {
+    left: var(--touch-safe-left);
+    right: calc(50% + var(--tablet-portrait-hud-half-gap));
+    grid-template-columns: minmax(42px, 0.5fr) repeat(2, minmax(0, 1fr));
+  }
+
+  .hud-left .metric:nth-child(2) .metric-value,
+  .hud-left .metric:nth-child(3) .metric-value {
+    overflow: visible;
+    overflow-wrap: break-word;
+    line-height: 1.15;
+    text-overflow: clip;
+    white-space: normal;
+    word-break: normal;
+  }
+
+  .hud-timer {
+    left: calc(50% + var(--tablet-portrait-hud-half-gap));
+    right: var(--touch-safe-right);
+    grid-template-columns: minmax(0, 1.25fr) repeat(2, minmax(0, 0.75fr));
+  }
+
+  .main-menu-content {
+    top: 50%;
+    gap: clamp(58px, 7dvh, 86px);
+    width: min(680px, calc(100vw - var(--touch-safe-left) - var(--touch-safe-right)));
+    transform: translate(-50%, -50%);
+  }
+
+  .main-menu h1 {
+    font-size: clamp(92px, 14vw, 118px);
+  }
+
+  .main-menu[data-menu-mode="how-to-play"] {
+    --tutorial-visual-height: 330px;
+    padding-top: calc(var(--touch-safe-top) + 64px);
+  }
+
+  .main-menu[data-menu-mode="how-to-play"] .main-menu-content {
+    width: 720px;
+    height: 720px;
+    gap: 0;
+    transform: translate(-50%, -50%) scale(var(--how-to-play-scale));
+  }
+
+  .how-to-play-instruction {
+    gap: 20px;
+    padding: 28px 48px 40px;
+  }
+
+  .completion-overlay {
+    padding: clamp(26px, 4vmin, 36px);
+  }
+
+  .results-overlay {
+    align-items: center;
+  }
+}
+
+/* Phone portrait is the primary phone layout. */
+@media (hover: none) and (pointer: coarse) and (orientation: portrait) and (max-width: 600px) {
+  :root {
+    --gameplay-control-size: clamp(44px, 12vw, 50px);
+    --gameplay-control-gap: 8px;
+    --phone-carousel-height: clamp(52px, 14vw, 58px);
+    --phone-hud-row-height: clamp(56px, 15vw, 64px);
+    --phone-hud-gap: 8px;
+  }
+
+  .gameplay-exit-button,
+  .gameplay-help-button,
+  .gameplay-map-button {
+    width: var(--gameplay-control-size);
+    height: var(--gameplay-control-size);
+    border-radius: 7px;
+    box-shadow: 0 3px 0 #111111;
+  }
+
+  .gameplay-help-button {
+    font-size: clamp(23px, 7vw, 28px);
+  }
+
+  .gameplay-exit-button .button-icon,
+  .gameplay-map-button .button-icon {
+    width: clamp(22px, 6vw, 26px);
+    height: clamp(22px, 6vw, 26px);
+  }
+
+  .line-indicator {
+    left: var(--touch-safe-left);
+    right: var(--touch-safe-right);
+    width: auto;
+    height: var(--phone-carousel-height);
+    max-width: none;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    padding: 5px clamp(8px, 2.4vw, 10px);
+    transform: none;
+  }
+
+  .line-chip-preview,
+  .line-chip-disabled {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .line-chip {
+    padding: 4px clamp(6px, 1.8vw, 8px);
+  }
+
+  .line-chip-current {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 4px;
+    min-height: 0;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .line-chip-current .line-chip-key {
+    display: grid;
+    min-width: 28px;
+    height: 22px;
+    padding-right: 3px;
+    padding-left: 3px;
+    font-size: 10px;
+  }
+
+  .line-chip-name {
+    font-size: clamp(10px, 3vw, 13px);
+  }
+
+  .line-chip-name[data-phone-name] {
+    font-size: 0;
+  }
+
+  .line-chip-name[data-phone-name]::after {
+    content: attr(data-phone-name);
+    font-size: clamp(10px, 3vw, 13px);
+  }
+
+  .gameplay-exit-button,
+  .gameplay-help-button {
+    top: calc(
+      var(--touch-safe-top) + var(--phone-carousel-height) + var(--gameplay-control-gap)
+    );
+  }
+
+  .gameplay-map-button {
+    top: calc(
+      var(--touch-safe-top) + var(--phone-carousel-height) +
+        var(--gameplay-control-gap) + var(--gameplay-control-size) +
+        var(--gameplay-control-gap)
+    );
+  }
+
+  .dismissed-round-action {
+    top: calc(
+      var(--touch-safe-top) + var(--phone-carousel-height) + var(--gameplay-control-gap)
+    );
+    height: var(--gameplay-control-size);
+    border-radius: 7px;
+    padding: 0 14px;
+    font-size: 14px;
+    box-shadow: 0 3px 0 #111111;
+  }
+
+  .dismissed-round-action:active {
+    transform: translateY(3px);
+  }
+
+  .exit-confirm-overlay {
+    padding-top: calc(
+      var(--touch-safe-top) + var(--phone-carousel-height) +
+        var(--gameplay-control-gap) + var(--gameplay-control-size) +
+        var(--gameplay-control-gap)
+    );
+  }
+
+  .hud-left,
+  .hud-timer {
+    left: var(--touch-safe-left);
+    right: var(--touch-safe-right);
+    width: auto;
+    max-width: none;
+    min-height: var(--phone-hud-row-height);
+    gap: 6px;
+    padding: 8px 10px;
+    transform: none;
+    text-align: left;
+  }
+
+  .hud-left {
+    bottom: calc(
+      var(--touch-safe-bottom) + var(--phone-hud-row-height) + var(--phone-hud-gap)
+    );
+    grid-template-columns: minmax(48px, 0.55fr) repeat(2, minmax(0, 1fr));
+  }
+
+  .hud-left .metric:nth-child(2) .metric-value,
+  .hud-left .metric:nth-child(3) .metric-value {
+    overflow: visible;
+    overflow-wrap: break-word;
+    line-height: 1.15;
+    text-overflow: clip;
+    white-space: normal;
+    word-break: normal;
+  }
+
+  .hud-timer {
+    bottom: var(--touch-safe-bottom);
+    grid-template-columns: minmax(0, 1.35fr) repeat(2, minmax(0, 0.8fr));
+  }
+
+  .metric-label {
+    font-size: clamp(8px, 2.4vw, 10px);
+  }
+
+  .metric-value {
+    font-size: clamp(13px, 3.8vw, 16px);
+  }
+
+  .hud-timer .metric-value {
+    font-size: clamp(21px, 6.5vw, 27px);
+  }
+
+  .main-menu-content {
+    top: 50%;
+    left: 50vw;
+    gap: clamp(32px, 6dvh, 50px);
+    width: min(310px, calc(100vw - var(--touch-safe-left) - var(--touch-safe-right)));
+    transform: translate(-50%, -50%);
+  }
+
+  .main-menu h1 {
+    font-size: clamp(52px, 17vw, 68px);
+    -webkit-text-stroke-width: 4px;
+  }
+
+  .main-menu-actions,
+  .main-menu-seed-form {
+    gap: 10px;
+    width: min(270px, 100%);
+  }
+
+  .main-menu-button {
+    height: clamp(44px, 11.5vw, 48px);
+    font-size: clamp(17px, 4.6vw, 20px);
+  }
+
+  .main-menu-seed-form input {
+    height: clamp(44px, 11.5vw, 48px);
+    font-size: 17px;
+  }
+
+  .menu-back {
+    min-width: 86px;
+    height: 42px;
+    padding: 0 11px;
+    font-size: 16px;
+  }
+
+  .main-menu-social-link {
+    width: 40px;
+    height: 40px;
+  }
+
+  .main-menu[data-menu-mode="how-to-play"] {
+    --tutorial-visual-height: 250px;
+    padding-top: calc(var(--touch-safe-top) + 54px);
+  }
+
+  .main-menu[data-menu-mode="how-to-play"] .main-menu-content {
+    top: calc(50% + 12px);
+    width: 360px;
+    height: 620px;
+    gap: 0;
+    transform: translate(-50%, -50%) scale(var(--how-to-play-scale));
+  }
+
+  .how-to-play-carousel {
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    gap: 12px 8px;
+  }
+
+  .how-to-play-arrow {
+    width: 44px;
+    height: 44px;
+  }
+
+  .how-to-play-instruction {
+    gap: 12px;
+    padding: 14px 18px 24px;
+  }
+
+  .how-to-play-copy h2 {
+    font-size: 25px;
+  }
+
+  .how-to-play-copy p {
+    font-size: 17px;
+    line-height: 1.25;
+  }
+
+  .countdown-value {
+    font-size: clamp(96px, 32vw, 128px);
+    -webkit-text-stroke-width: 6px;
+  }
+
+  .completion-overlay {
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    width: 100%;
+    height: 100dvh;
+    max-height: none;
+    transform: none;
+    border: 0;
+    border-radius: 0;
+    padding:
+      var(--touch-safe-top)
+      var(--touch-safe-right)
+      var(--touch-safe-bottom)
+      var(--touch-safe-left);
+    background: #ffffff;
+    box-shadow: none;
+  }
+
+  .completion-overlay:not([hidden]) ~ .gameplay-exit-button {
+    display: none;
+  }
+
+  .completion-overlay h1 {
+    margin-bottom: 12px;
+    padding-right: 48px;
+    font-size: clamp(26px, 8vw, 32px);
+  }
+
+  .completion-close {
+    top: var(--touch-safe-top);
+    right: var(--touch-safe-right);
+    width: 32px;
+    height: 32px;
+    font-size: 26px;
+  }
+
+  .completion-meta {
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 13px;
+  }
+
+  .completion-copy-seed {
+    height: 30px;
+    padding: 0 8px;
+    font-size: 12px;
+  }
+
+  .completion-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .completion-stat:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .completion-stat {
+    padding: 9px;
+  }
+
+  .completion-stat-label {
+    font-size: 11px;
+  }
+
+  .completion-stat-value {
+    font-size: clamp(24px, 7.5vw, 30px);
+  }
+
+  .completion-journey {
+    margin-top: 14px;
+  }
+
+  .completion-journey h2 {
+    top: 10px;
+    left: 12px;
+    font-size: 11px;
+  }
+
+  .completion-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 0;
+  }
+
+  .completion-actions .completion-action:not(.completion-action-secondary) {
+    margin-left: 0;
+  }
+
+  .completion-action {
+    flex: 1 1 100px;
+    height: 38px;
+    padding: 0 10px;
+    font-size: 14px;
+  }
+
+  .journey-route {
+    height: 108px;
+    padding-inline: 44px;
+  }
+
+  .journey-station-name {
+    top: 17px;
+    left: -45px;
+    width: 90px;
+    font-size: 10px;
+  }
+
+  .results-overlay {
+    display: block;
+  }
+
+  .results-panel {
+    width: 100%;
+    padding: 16px 12px;
+  }
+
+  .results-panel h1 {
+    margin-bottom: 14px;
+    font-size: 32px;
+  }
+
+  .results-seed {
+    gap: 7px;
+    padding: 9px;
+    font-size: 14px;
+  }
+
+  .results-seed button,
+  .results-nav-button {
+    height: 38px;
+    padding-inline: 10px;
+    font-size: 14px;
+  }
+
+  .results-table-viewport {
+    overflow: visible;
+  }
+
+  .results-table,
+  .results-table tbody,
+  .results-table tfoot,
+  .results-table tr {
+    display: block;
+    width: 100%;
+  }
+
+  .results-table {
+    font-size: 14px;
+  }
+
+  .results-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .results-table tbody,
+  .results-table tfoot {
+    display: grid;
+    gap: 10px;
+  }
+
+  .results-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    overflow: hidden;
+    border: 2px solid #111111;
+    border-radius: 7px;
+    background: #ffffff;
+  }
+
+  .results-table tbody th,
+  .results-table tbody td,
+  .results-table tfoot th,
+  .results-table tfoot td {
+    width: auto;
+    min-width: 0;
+    border-bottom: 0;
+    padding: 9px;
+    text-align: left;
+  }
+
+  .results-table tbody th:first-child {
+    grid-column: 1 / -1;
+    width: auto;
+    border-bottom: 2px solid rgba(17, 17, 17, 0.18);
+    background: #f7f2e5;
+    font-size: 16px;
+    font-weight: 900;
+  }
+
+  .results-table tbody td:nth-child(2),
+  .results-table tbody td:nth-child(3) {
+    grid-column: span 3;
+    width: auto;
+    min-height: 52px;
+  }
+
+  .results-table tbody td:nth-child(3),
+  .results-table tbody td:nth-child(5),
+  .results-table tbody td:nth-child(6) {
+    border-left: 1px solid rgba(17, 17, 17, 0.18);
+  }
+
+  .results-table tbody td:nth-child(n + 4) {
+    grid-column: span 2;
+    border-top: 1px solid rgba(17, 17, 17, 0.18);
+  }
+
+  .results-table tbody td::before,
+  .results-table tfoot td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 3px;
+    color: #555555;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .results-table tfoot {
+    margin-top: 10px;
+  }
+
+  .results-table tfoot tr {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: hidden;
+    border: 3px solid #111111;
+    border-radius: 7px;
+    background: #ffffff;
+  }
+
+  .results-table tfoot th:first-child {
+    grid-column: 1 / -1;
+    width: auto;
+    border-bottom: 2px solid #111111;
+    background: #f7f2e5;
+    font-size: 17px;
+    font-weight: 900;
+  }
+
+  .results-table tfoot td {
+    font-size: 18px;
+    font-weight: 900;
+  }
+
+  .results-table tfoot td:nth-child(2),
+  .results-table tfoot td:nth-child(3),
+  .results-table tfoot td:nth-child(4) {
+    width: auto;
+  }
+
+  .results-table tfoot td + td {
+    border-left: 1px solid rgba(17, 17, 17, 0.22);
+  }
+
+  .map-search-form,
+  .gameplay-map-search-form {
+    left: var(--touch-safe-left);
+    right: var(--touch-safe-right);
+    width: auto;
+    transform: none;
+  }
+
+  .map-search-form input,
+  .map-search-submit {
+    font-size: 15px;
+  }
+
+  .gameplay-map-dialog {
+    width: 100%;
+    height: 100%;
+    border-radius: 10px;
+  }
+
+  .gameplay-map-back {
+    top: 12px;
+    left: 12px;
+  }
+
+  .gameplay-map-search-form {
+    bottom: 12px;
+  }
+
+  .gameplay-map-zoom {
+    right: 12px;
+    bottom: 78px;
+  }
+
+  .exit-confirm-dialog {
+    width: min(
+      240px,
+      calc(
+        100vw - var(--touch-safe-left) - var(--touch-safe-right) -
+          var(--gameplay-control-size) - var(--gameplay-control-gap)
+      )
+    );
+    border-radius: 7px;
+    padding: 12px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+  }
+
+  .exit-confirm-dialog p {
+    margin-bottom: 10px;
+    font-size: 16px;
+    line-height: 1.15;
+  }
+
+  .exit-confirm-actions {
+    gap: 8px;
+  }
+
+  .exit-confirm-button {
+    height: 38px;
+    padding: 0 8px;
+    font-size: 14px;
+  }
+
+  .temporary-banner {
+    display: none;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) and (orientation: landscape) and (max-height: 500px) and (max-width: 1400px) {
+  .completion-overlay {
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100dvh;
+    max-width: none;
+    max-height: none;
+    transform: none;
+    border: 0;
+    border-radius: 0;
+    padding:
+      var(--touch-safe-top)
+      var(--touch-safe-right)
+      var(--touch-safe-bottom)
+      var(--touch-safe-left);
+    background: #ffffff;
+    box-shadow: none;
+  }
+
+  .completion-close {
+    top: var(--touch-safe-top);
+    right: var(--touch-safe-right);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
   .tutorial-line-selection .current-station-highlight {
     animation: none;
   }

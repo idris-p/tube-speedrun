@@ -11,7 +11,7 @@ import {
 } from "./game/completionCelebration";
 import { generateRoundConfigs, generateSeed } from "./game/seed";
 import { ROUND_COUNT, type RoundStats, type RunResults, type RunState } from "./game/RunState";
-import { cycleSelectedLine } from "./game/lineSelection";
+import { cycleSelectedLine, getLineCyclePreview } from "./game/lineSelection";
 import {
   attemptMoveInDirection,
   MOVEMENT_DIRECTIONS,
@@ -30,6 +30,13 @@ import {
   dragStubSelection,
   releaseStubSelection,
 } from "./input/stubSelection";
+import {
+  beginTouchGameplayGesture,
+  cancelTouchGameplayGesture,
+  getTouchGameplayAction,
+  updateTouchGameplayGesture,
+  type TouchGameplayGesture,
+} from "./input/touchGameplayGesture";
 import { MapRenderer } from "./rendering/mapRenderer";
 import { LINE_REVEAL_ANIMATION_SPEED } from "./rendering/lineRenderer";
 import { GRID_CELL_SIZE } from "./rendering/grid";
@@ -97,6 +104,7 @@ let panPointerId: number | null = null;
 let lastPanPoint: Point | null = null;
 const mapTouchPoints = new Map<number, Point>();
 let mapPinchGesture: PinchGesture | null = null;
+let touchGameplayGesture: TouchGameplayGesture | null = null;
 let lineRevealAnimation: {
   connectionId: string;
   fromStationId: string;
@@ -121,7 +129,7 @@ let gameplayMapPanPointerId: number | null = null;
 let gameplayMapLastPanPoint: Point | null = null;
 const gameplayMapTouchPoints = new Map<number, Point>();
 let gameplayMapPinchGesture: PinchGesture | null = null;
-const mobilePortraitQuery = window.matchMedia("(any-pointer: coarse) and (orientation: portrait)");
+const touchGameplayControlsQuery = window.matchMedia("(hover: none) and (pointer: coarse)");
 
 const hud = new Hud(appRoot, networkData, {
   onStartRandomSeed: () => startRun(generateSeed(), "random"),
@@ -201,7 +209,19 @@ const hud = new Hud(appRoot, networkData, {
 
 const renderer = new MapRenderer(hud.mapHost, networkData);
 gameplayMapRenderer = new MapRenderer(hud.gameplayMapHost, networkData);
-mobilePortraitQuery.addEventListener("change", () => render());
+let resizeRenderFrame: number | null = null;
+window.addEventListener("resize", () => {
+  if (resizeRenderFrame !== null) {
+    return;
+  }
+  resizeRenderFrame = window.requestAnimationFrame((now) => {
+    resizeRenderFrame = null;
+    render(now);
+    if (hud.isGameplayMapOpen()) {
+      gameplayMapRenderer.renderExplorer();
+    }
+  });
+});
 
 gameplayMapRenderer.svg.addEventListener("wheel", (event) => {
   event.preventDefault();
@@ -375,6 +395,7 @@ function advanceFromCompletedRound(): void {
 
 function resetRunTransientState(): void {
   cancelMovePointerSelection();
+  resetTouchGameplayGesture();
   resetMapTouchGesture();
   lineRevealAnimation = null;
   stationWipeAnimation = null;
@@ -388,16 +409,12 @@ function resetRunTransientState(): void {
 
 function render(now = performance.now()): void {
   if (mapViewerActive) {
-    if (mobilePortraitQuery.matches) {
-      renderer.renderMenuPreview(now);
-    } else {
-      renderer.renderExplorer();
-    }
+    renderer.renderExplorer();
   } else if (results) {
     renderer.renderMenuPreview(now);
     hud.showResults(results);
   } else if (state && runState) {
-    if (mobilePortraitQuery.matches || hud.isGameplayHelpOpen()) {
+    if (hud.isGameplayHelpOpen()) {
       renderer.renderMenuPreview(now);
     } else {
       renderer.render(
@@ -407,6 +424,7 @@ function render(now = performance.now()): void {
         getActiveCameraPanAnimation(now),
         completionCelebration !== null,
         completionCelebration !== null && completionCelebration.startedAt !== null,
+        !touchGameplayControlsQuery.matches,
       );
       refreshHoveredMoveStub();
     }
@@ -423,9 +441,7 @@ function render(now = performance.now()): void {
 function tick(): void {
   const now = performance.now();
   if (mapViewerActive) {
-    if (mobilePortraitQuery.matches) {
-      renderer.renderMenuPreview(now);
-    }
+    // The explorer is static until the player pans, zooms, searches, or resizes it.
   } else if (countdown) {
     if (now - countdown.startedAt >= COUNTDOWN_STEP_MS * COUNTDOWN_START_VALUE) {
       completeCountdown(countdown.run, now);
@@ -592,6 +608,15 @@ bindKeyboardControls(changeSelectedLine);
 
 renderer.svg.addEventListener("pointermove", (event) => {
   rememberMousePoint(event);
+  if (event.pointerType === "touch" && touchGameplayGesture?.pointerId === event.pointerId) {
+    touchGameplayGesture = updateTouchGameplayGesture(
+      touchGameplayGesture,
+      event.pointerId,
+      { x: event.clientX, y: event.clientY },
+    );
+    event.preventDefault();
+    return;
+  }
   if (event.pointerType === "touch" && mapTouchPoints.has(event.pointerId)) {
     mapTouchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (mapTouchPoints.size >= 2) {
@@ -616,6 +641,10 @@ renderer.svg.addEventListener("pointermove", (event) => {
     renderer.panByClientDelta(event.clientX - lastPanPoint.x, event.clientY - lastPanPoint.y);
     lastPanPoint = { x: event.clientX, y: event.clientY };
     render();
+    return;
+  }
+
+  if (event.pointerType === "touch" && touchGameplayControlsQuery.matches) {
     return;
   }
 
@@ -848,6 +877,25 @@ renderer.svg.addEventListener("pointerdown", (event) => {
     return;
   }
 
+  if (
+    event.pointerType === "touch" &&
+    touchGameplayControlsQuery.matches &&
+    canUseTouchGameplayControls()
+  ) {
+    if (touchGameplayGesture) {
+      touchGameplayGesture = cancelTouchGameplayGesture(touchGameplayGesture);
+    } else {
+      touchGameplayGesture = beginTouchGameplayGesture(
+        event.pointerId,
+        { x: event.clientX, y: event.clientY },
+      );
+      renderer.svg.setPointerCapture(event.pointerId);
+    }
+    setHoveredMoveStub(null);
+    event.preventDefault();
+    return;
+  }
+
   if (event.pointerType === "touch" && canPanAndZoom()) {
     mapTouchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
     renderer.svg.setPointerCapture(event.pointerId);
@@ -860,6 +908,11 @@ renderer.svg.addEventListener("pointerdown", (event) => {
       lastPanPoint = { x: event.clientX, y: event.clientY };
     }
     renderer.svg.classList.add("tube-map-panning");
+    event.preventDefault();
+    return;
+  }
+
+  if (event.pointerType === "touch" && touchGameplayControlsQuery.matches) {
     event.preventDefault();
     return;
   }
@@ -886,6 +939,59 @@ renderer.svg.addEventListener("pointerdown", (event) => {
 function canPanAndZoom(): boolean {
   return !hud.isGameplayOverlayOpen() &&
     (mapViewerActive || Boolean(state?.completed && completionCelebration === null));
+}
+
+function canUseTouchGameplayControls(): boolean {
+  return touchGameplayControlsQuery.matches &&
+    !mapViewerActive &&
+    Boolean(state && !state.completed) &&
+    !hud.isGameplayOverlayOpen();
+}
+
+function canCycleLineWithTouch(): boolean {
+  const lineCount = state ? getLineCyclePreview(state, networkData)?.lineCount ?? 0 : 0;
+  return lineCount > 1;
+}
+
+function endTouchGameplayPointer(event: PointerEvent, performAction: boolean): boolean {
+  if (event.pointerType !== "touch" || touchGameplayGesture?.pointerId !== event.pointerId) {
+    return false;
+  }
+
+  touchGameplayGesture = updateTouchGameplayGesture(
+    touchGameplayGesture,
+    event.pointerId,
+    { x: event.clientX, y: event.clientY },
+  );
+  const gameplayBounds = renderer.svg.getBoundingClientRect();
+  const action = performAction && canUseTouchGameplayControls()
+    ? getTouchGameplayAction(
+        touchGameplayGesture,
+        gameplayBounds.left + gameplayBounds.width / 2,
+      )
+    : null;
+  if (renderer.svg.hasPointerCapture(event.pointerId)) {
+    renderer.svg.releasePointerCapture(event.pointerId);
+  }
+  touchGameplayGesture = null;
+
+  if (action?.type === "move") {
+    attemptMoveFromStub(action.direction, performance.now());
+    render();
+  } else if (action?.type === "cycle-line" && canCycleLineWithTouch()) {
+    changeSelectedLine(action.offset);
+  }
+
+  event.preventDefault();
+  return true;
+}
+
+function resetTouchGameplayGesture(): void {
+  const pointerId = touchGameplayGesture?.pointerId;
+  if (pointerId !== undefined && renderer.svg.hasPointerCapture(pointerId)) {
+    renderer.svg.releasePointerCapture(pointerId);
+  }
+  touchGameplayGesture = null;
 }
 
 function endPan(event: PointerEvent): void {
@@ -946,11 +1052,17 @@ function endMovePointer(event: PointerEvent, moveOnRelease: boolean): void {
 }
 
 renderer.svg.addEventListener("pointerup", (event) => {
+  if (endTouchGameplayPointer(event, true)) {
+    return;
+  }
   endMapTouchPointer(event);
   endMovePointer(event, true);
   endPan(event);
 });
 renderer.svg.addEventListener("pointercancel", (event) => {
+  if (endTouchGameplayPointer(event, false)) {
+    return;
+  }
   endMapTouchPointer(event);
   endMovePointer(event, false);
   endPan(event);

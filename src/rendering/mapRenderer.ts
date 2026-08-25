@@ -142,6 +142,7 @@ export class MapRenderer {
     cameraPan: CameraPanAnimation | null = null,
     completionInteractionLocked = false,
     targetArrivalCelebration = false,
+    directionStubsInteractive = true,
   ): void {
     const wasMenuPreview = this.svg.classList.contains("tube-map-menu-preview");
     if (this.renderedSeed !== state.seed) {
@@ -240,13 +241,18 @@ export class MapRenderer {
       const stubLayer = document.createElementNS(SVG_NS, "g");
       stubLayer.setAttribute("class", "direction-stubs");
       this.svg.append(stubLayer);
-      const directionStubs = this.getDirectionStubs(state.currentStationId, state.selectedLineId);
+      const directionStubs = this.getDirectionStubs(
+        state.currentStationId,
+        state.selectedLineId,
+        state.revealedConnections,
+      );
       this.renderDirectionStubs(
         stubLayer,
         directionStubs,
         isInterchangeStation(currentStation),
         state.revealedConnections,
         visibleConnections,
+        directionStubsInteractive,
       );
     }
 
@@ -686,7 +692,11 @@ export class MapRenderer {
     };
   }
 
-  private getDirectionStubs(stationId: string, selectedLineId: LineId) {
+  private getDirectionStubs(
+    stationId: string,
+    selectedLineId: LineId,
+    revealedConnections: ReadonlySet<string>,
+  ) {
     return getAvailableDirectionConnections(this.network, stationId, selectedLineId).flatMap((connection) => {
       const direction = getConnectionFirstStepDirection(connection, stationId);
       const unit = getDirectionStubUnit(connection, stationId);
@@ -695,9 +705,13 @@ export class MapRenderer {
       }
 
       const linePoint = this.corridorLayout.getStationLinePoint(stationId, connection.line);
-      const routePoints = getDirectionStubRoutePoints(
-        this.corridorLayout.getConnectionCameraPoints(connection),
-        linePoint,
+      const routePoints = getExploredDirectionStubRoutePoints(
+        connection.id,
+        getDirectionStubRoutePoints(
+          this.corridorLayout.getConnectionCameraPoints(connection),
+          linePoint,
+        ),
+        revealedConnections,
       );
       const start = getDirectionStubStart(
         this.corridorLayout.getStationMarkerGroups(stationId),
@@ -727,6 +741,7 @@ export class MapRenderer {
     interchange: boolean,
     revealedConnections: ReadonlySet<string>,
     visibleConnections: readonly Connection[],
+    interactive: boolean,
   ): void {
 
     const groups = new Map<string, typeof stubs>();
@@ -773,10 +788,12 @@ export class MapRenderer {
         length: getDirectionStubRenderLength(interchange),
         hitStartInset: getDirectionStubHitStartInset(interchange),
         hideShaft: shouldHideWalkStubShaft(stub.connection, revealedConnections),
-        interaction: {
-          direction: stub.direction,
-          label: `Travel ${stub.direction} to ${targetStation.name} on the ${LINE_BY_ID[stub.connection.line].name} line`,
-        },
+        interaction: interactive
+          ? {
+              direction: stub.direction,
+              label: `Travel ${stub.direction} to ${targetStation.name} on the ${LINE_BY_ID[stub.connection.line].name} line`,
+            }
+          : undefined,
       });
       control.dataset.connectionId = stub.connection.id;
       control.dataset.targetStationId = targetStation.id;
@@ -868,6 +885,14 @@ export type DirectionStubLike = {
   linePoint: Point;
   normal: Point;
 };
+
+export function getExploredDirectionStubRoutePoints(
+  connectionId: string,
+  routePoints: Point[],
+  revealedConnections: ReadonlySet<string>,
+): Point[] | undefined {
+  return revealedConnections.has(connectionId) ? routePoints : undefined;
+}
 
 export function compareDirectionStubsByRenderedOffset(
   first: DirectionStubLike,

@@ -7,7 +7,6 @@ import { getLineCyclePreview } from "../game/lineSelection";
 import { getStation } from "../game/movement";
 import { ROUND_COUNT, type RunResults, type RunState } from "../game/RunState";
 import { GRID_CELL_SIZE } from "../rendering/grid";
-import { getStubArrowHeadPoints } from "../rendering/directionStubRenderer";
 import { LINE_STROKE_WIDTH } from "../rendering/lineStyles";
 import {
   INTERCHANGE_OUTLINE_WIDTH,
@@ -46,6 +45,10 @@ const SOCIAL_LINKS: { id: SocialLinkId; label: string; href: string }[] = [
 ];
 const SVG_NS = "http://www.w3.org/2000/svg";
 const JOURNEY_MARKER_SIZE = 20;
+const PHONE_LINE_NAME_BY_ID: Partial<Record<keyof typeof LINE_BY_ID, string>> = {
+  "hammersmith-city": "H & C",
+  "waterloo-city": "W & C",
+};
 
 export class Hud {
   readonly mapHost: HTMLDivElement;
@@ -203,7 +206,7 @@ export class Hud {
     const mapViewerBack = document.createElement("button");
     mapViewerBack.type = "button";
     mapViewerBack.className = "map-viewer-back";
-    mapViewerBack.textContent = "\u25c0 Menu";
+    mapViewerBack.append(createTriangleIcon("previous"), "Menu");
     mapViewerBack.addEventListener("click", callbacks.onReturnToMenu);
     const mapSearchForm = document.createElement("form");
     mapSearchForm.className = "map-search-form";
@@ -399,7 +402,7 @@ export class Hud {
     const gameplayMapBack = document.createElement("button");
     gameplayMapBack.type = "button";
     gameplayMapBack.className = "gameplay-map-back";
-    gameplayMapBack.textContent = "\u25c0 Back";
+    gameplayMapBack.append(createTriangleIcon("previous"), "Back");
     gameplayMapBack.addEventListener("click", () => this.closeGameplayMap());
     const gameplayMapZoom = document.createElement("div");
     gameplayMapZoom.className = "gameplay-map-zoom";
@@ -607,16 +610,17 @@ export class Hud {
     totalLabel.colSpan = 3;
     totalRow.append(
       totalLabel,
-      tableCell(this.resultsTotalTime),
-      tableCell(this.resultsTotalChanges),
-      tableCell(this.resultsTotalMoves),
+      tableCell(this.resultsTotalTime, "td", "Time"),
+      tableCell(this.resultsTotalChanges, "td", "Changes"),
+      tableCell(this.resultsTotalMoves, "td", "Moves"),
     );
     resultsTableFoot.append(totalRow);
     resultsTable.append(resultsTableHead, this.resultsTableBody, resultsTableFoot);
-    resultsPanel.append(resultsTitle, resultsSeed, this.resultsSeedMessage, resultsTable);
+    const resultsTableViewport = document.createElement("div");
+    resultsTableViewport.className = "results-table-viewport";
+    resultsTableViewport.append(resultsTable);
+    resultsPanel.append(resultsTitle, resultsSeed, this.resultsSeedMessage, resultsTableViewport);
     this.resultsOverlay.append(resultsExit, resultsPlayAgain, resultsPanel);
-    const portraitOrientationOverlay = createPortraitOrientationOverlay();
-
     root.append(
       this.mapHost,
       this.statsPanel,
@@ -635,7 +639,6 @@ export class Hud {
       this.gameplayMapOverlay,
       this.dismissedRoundActionButton,
       this.resultsOverlay,
-      portraitOrientationOverlay,
     );
     window.addEventListener("resize", () => this.updateHowToPlayScale());
   }
@@ -699,12 +702,12 @@ export class Hud {
         const targetStation = getStation(this.network, round.destinationStationId);
         const row = document.createElement("tr");
         row.append(
-          tableCell(String(stats.roundNumber), "th"),
-          tableCell(startStation.name),
-          tableCell(targetStation.name),
-          tableCell(formatMilliseconds(stats.timeMs)),
-          tableCell(String(stats.lineChanges)),
-          tableCell(String(stats.moves)),
+          tableCell(String(stats.roundNumber), "th", "Round"),
+          tableCell(startStation.name, "td", "Start"),
+          tableCell(targetStation.name, "td", "Target"),
+          tableCell(formatMilliseconds(stats.timeMs), "td", "Time"),
+          tableCell(String(stats.lineChanges), "td", "Changes"),
+          tableCell(String(stats.moves), "td", "Moves"),
         );
         return row;
       }),
@@ -1046,6 +1049,10 @@ export class Hud {
     return this.gameplayHelpOpen || this.gameplayMapOpen;
   }
 
+  isGameplayMapOpen(): boolean {
+    return this.gameplayMapOpen;
+  }
+
   private openGameplayMap(): void {
     this.gameplayMapOpen = true;
     this.shell.classList.add("gameplay-map-active");
@@ -1214,59 +1221,6 @@ export class Hud {
     this.zoomControls?.remove();
     this.zoomControls = null;
   }
-}
-
-function createPortraitOrientationOverlay(): HTMLDivElement {
-  const overlay = document.createElement("div");
-  overlay.className = "portrait-orientation-overlay";
-  overlay.setAttribute("role", "status");
-  overlay.setAttribute("aria-label", "Rotate your device to landscape orientation");
-
-  const prompt = document.createElement("div");
-  prompt.className = "portrait-orientation-prompt";
-
-  const icon = document.createElementNS(SVG_NS, "svg");
-  icon.setAttribute("class", "portrait-orientation-icon");
-  icon.setAttribute("viewBox", "0 0 140 130");
-  icon.setAttribute("aria-hidden", "true");
-
-  const phone = document.createElementNS(SVG_NS, "g");
-  phone.setAttribute("class", "portrait-orientation-phone");
-  const phoneBody = document.createElementNS(SVG_NS, "rect");
-  phoneBody.setAttribute("x", "51");
-  phoneBody.setAttribute("y", "26");
-  phoneBody.setAttribute("width", "38");
-  phoneBody.setAttribute("height", "68");
-  phoneBody.setAttribute("rx", "6");
-  const phoneHome = document.createElementNS(SVG_NS, "line");
-  phoneHome.setAttribute("x1", "63");
-  phoneHome.setAttribute("y1", "85");
-  phoneHome.setAttribute("x2", "77");
-  phoneHome.setAttribute("y2", "85");
-  phone.append(phoneBody, phoneHome);
-
-  const turn = document.createElementNS(SVG_NS, "path");
-  turn.setAttribute("class", "portrait-orientation-turn");
-  turn.setAttribute("d", "M 70 5 A 55 55 0 0 1 125 60 L 125 62");
-  const arrowhead = document.createElementNS(SVG_NS, "polygon");
-  arrowhead.setAttribute("class", "portrait-orientation-arrowhead");
-  arrowhead.setAttribute(
-    "points",
-    getStubArrowHeadPoints(
-      { x: 125, y: 76 },
-      { x: 0, y: 1 },
-      { x: -1, y: 0 },
-    ).map((point) => `${point.x},${point.y}`).join(" "),
-  );
-  icon.append(phone, turn, arrowhead);
-
-  const title = document.createElement("strong");
-  title.textContent = "Rotate your device";
-  const message = document.createElement("span");
-  message.textContent = "This game is designed for landscape play.";
-  prompt.append(icon, title, message);
-  overlay.append(prompt);
-  return overlay;
 }
 
 function menuButton(
@@ -1490,6 +1444,10 @@ function lineChip(label: string, lineId: keyof typeof LINE_BY_ID, variant: "prev
   const name = document.createElement("span");
   name.className = "line-chip-name";
   name.textContent = line.name;
+  const phoneName = PHONE_LINE_NAME_BY_ID[lineId];
+  if (phoneName) {
+    name.dataset.phoneName = phoneName;
+  }
 
   chip.append(key, name);
   return chip;
@@ -1557,8 +1515,15 @@ function createJourneyStop(
   return stop;
 }
 
-function tableCell(content: string | HTMLElement, tag: "td" | "th" = "td"): HTMLTableCellElement {
+function tableCell(
+  content: string | HTMLElement,
+  tag: "td" | "th" = "td",
+  label?: string,
+): HTMLTableCellElement {
   const cell = document.createElement(tag);
+  if (label) {
+    cell.dataset.label = label;
+  }
   if (typeof content === "string") {
     cell.textContent = content;
   } else {

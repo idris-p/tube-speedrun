@@ -13,6 +13,7 @@ import {
   getDirectionStubRenderLength,
   getDirectionStubRoutePoints,
   getDirectionStubUnit,
+  getExploredDirectionStubRoutePoints,
   getMapPanPadding,
   getPointAlongPolyline,
   getSelectedStationMarkerPoint,
@@ -129,6 +130,20 @@ describe("direction stub controls", () => {
       x: -Math.SQRT1_2,
       y: Math.SQRT1_2,
     });
+  });
+
+  it("keeps an unexplored curved route stub straight until its connection is revealed", () => {
+    const routePoints = [
+      { x: 0, y: 0 },
+      { x: 20, y: 0 },
+      { x: 20, y: -20 },
+    ];
+    const connectionId = "northern:mornington-crescent:camden-town";
+
+    expect(getExploredDirectionStubRoutePoints(connectionId, routePoints, new Set()))
+      .toBeUndefined();
+    expect(getExploredDirectionStubRoutePoints(connectionId, routePoints, new Set([connectionId])))
+      .toBe(routePoints);
   });
 
   it("follows bends beside Mornington Crescent while preserving stub length", () => {
