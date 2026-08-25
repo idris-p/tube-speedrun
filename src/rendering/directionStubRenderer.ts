@@ -15,6 +15,7 @@ const STUB_ARROW_OUTER_HALF_WIDTH = 13;
 const STUB_ARROW_INNER_HALF_WIDTH = STUB_STROKE_WIDTH / 2;
 const STUB_SHAFT_OVERLAP = 2;
 const STUB_CORNER_RADIUS = 20;
+const STUB_ARROW_CURVE_INFLUENCE = 1.8;
 
 export type DirectionStubRenderOptions = {
   lineId: LineId;
@@ -25,6 +26,7 @@ export type DirectionStubRenderOptions = {
   offset?: number;
   length?: number;
   hitStartInset?: number;
+  hideShaft?: boolean;
   interaction?: {
     direction: MovementDirection;
     label: string;
@@ -42,18 +44,21 @@ export function renderDirectionStub(
     offset = 0,
     length = DEFAULT_DIRECTION_STUB_LENGTH,
     hitStartInset = 0,
+    hideShaft = false,
     interaction,
   }: DirectionStubRenderOptions,
 ): SVGGElement {
   const pathPoints = getDirectionStubPathPoints(routePoints, start, unit, normal, offset, length);
   const offsetStart = pathPoints[0];
+  const arrowUnit = getDirectionStubArrowUnit(pathPoints, unit);
+  const arrowNormal = { x: -arrowUnit.y, y: arrowUnit.x };
+  const arrowEnd = getDirectionStubArrowEnd(pathPoints, arrowUnit);
   const hitPathPoints = getPolylineSlice(pathPoints, hitStartInset, length);
   const shaftPathPoints = getPolylineSlice(
     pathPoints,
     0,
     length - (STUB_ARROW_INNER_INSET - STUB_SHAFT_OVERLAP),
   );
-  const arrowEnd = getDirectionStubArrowEnd(pathPoints, unit);
 
   const control = document.createElementNS(SVG_NS, "g");
   control.setAttribute("class", "direction-stub-control");
@@ -88,6 +93,9 @@ export function renderDirectionStub(
   line.setAttribute("stroke-linejoin", "round");
   line.setAttribute("fill", "none");
   line.setAttribute("class", "direction-stub");
+  if (hideShaft) {
+    line.classList.add("direction-stub-shaft-hidden");
+  }
   if (lineId === "walk") {
     line.setAttribute("stroke-dasharray", "8 6");
   }
@@ -96,7 +104,7 @@ export function renderDirectionStub(
   const arrowHead = document.createElementNS(SVG_NS, "polygon");
   arrowHead.setAttribute(
     "points",
-    getStubArrowHeadPoints(arrowEnd, unit, normal)
+    getStubArrowHeadPoints(arrowEnd, arrowUnit, arrowNormal)
       .map((point) => `${point.x},${point.y}`)
       .join(" "),
   );
@@ -163,7 +171,30 @@ export function getStubShaftEnd(end: Point, unit: Point): Point {
   };
 }
 
-export function getDirectionStubArrowEnd(pathPoints: Point[], unit: Point): Point {
+export function getDirectionStubArrowUnit(pathPoints: Point[], movementUnit: Point): Point {
+  const start = pathPoints[0];
+  const end = pathPoints.at(-1);
+  if (!start || !end) return movementUnit;
+
+  const chord = { x: end.x - start.x, y: end.y - start.y };
+  const chordLength = Math.hypot(chord.x, chord.y);
+  if (chordLength === 0) return movementUnit;
+
+  const chordUnit = { x: chord.x / chordLength, y: chord.y / chordLength };
+  const angleDelta = Math.atan2(
+    movementUnit.x * chordUnit.y - movementUnit.y * chordUnit.x,
+    movementUnit.x * chordUnit.x + movementUnit.y * chordUnit.y,
+  );
+  if (angleDelta === 0) return movementUnit;
+  const arrowAngle = Math.atan2(movementUnit.y, movementUnit.x) +
+    angleDelta * STUB_ARROW_CURVE_INFLUENCE;
+  return {
+    x: Math.cos(arrowAngle),
+    y: Math.sin(arrowAngle),
+  };
+}
+
+export function getDirectionStubArrowEnd(pathPoints: Point[], arrowUnit: Point): Point {
   const pathLength = getPolylineLength(pathPoints);
   const shaftEndDistance = Math.max(
     0,
@@ -175,8 +206,8 @@ export function getDirectionStubArrowEnd(pathPoints: Point[], unit: Point): Poin
     shaftEndDistance,
   );
   return {
-    x: shaftEnd.x + unit.x * STUB_ARROW_OUTER_CORNER_INSET,
-    y: shaftEnd.y + unit.y * STUB_ARROW_OUTER_CORNER_INSET,
+    x: shaftEnd.x + arrowUnit.x * STUB_ARROW_OUTER_CORNER_INSET,
+    y: shaftEnd.y + arrowUnit.y * STUB_ARROW_OUTER_CORNER_INSET,
   };
 }
 

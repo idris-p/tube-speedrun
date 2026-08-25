@@ -9,6 +9,7 @@ import {
   getAvailableDirectionConnections,
   getDirectionStubStart,
   getDirectionStubHitStartInset,
+  getRevealedDirectionStubOffset,
   getDirectionStubRenderLength,
   getDirectionStubRoutePoints,
   getDirectionStubUnit,
@@ -19,10 +20,12 @@ import {
   getStubShaftEnd,
   getZoomAnchoredCameraCenter,
   groupConnectionsByRenderedPath,
+  shouldHideWalkStubShaft,
 } from "./mapRenderer";
 import { CorridorLayout } from "./corridorLayout";
 import {
   getDirectionStubArrowEnd,
+  getDirectionStubArrowUnit,
   getDirectionStubPathPoints,
 } from "./directionStubRenderer";
 import { getOneWayArrowLineSegments } from "./lineRenderer";
@@ -63,6 +66,13 @@ describe("direction stub controls", () => {
     ).toEqual({ x: 30, y: 0 });
   });
 
+  it("keeps a straight stub arrowhead in its original direction", () => {
+    expect(getDirectionStubArrowUnit(
+      [{ x: 0, y: 0 }, { x: DEFAULT_DIRECTION_STUB_LENGTH, y: 0 }],
+      { x: 1, y: 0 },
+    )).toEqual({ x: 1, y: 0 });
+  });
+
   it("keeps a straight stub arrowhead in its original position", () => {
     expect(getDirectionStubArrowEnd(
       [{ x: 0, y: 0 }, { x: DEFAULT_DIRECTION_STUB_LENGTH, y: 0 }],
@@ -70,13 +80,30 @@ describe("direction stub controls", () => {
     )).toEqual({ x: DEFAULT_DIRECTION_STUB_LENGTH, y: 0 });
   });
 
-  it("shifts the arrowhead opposite the bend to meet the curved shaft", () => {
-    const arrowEnd = getDirectionStubArrowEnd(
-      [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: -14 }],
+  it("applies the configured influence to the stub's overall curve angle", () => {
+    const bendAngle = 20 * Math.PI / 180;
+    const arrowUnit = getDirectionStubArrowUnit(
+      [
+        { x: 0, y: 0 },
+        {
+          x: DEFAULT_DIRECTION_STUB_LENGTH * Math.cos(bendAngle),
+          y: DEFAULT_DIRECTION_STUB_LENGTH * Math.sin(bendAngle),
+        },
+      ],
       { x: 1, y: 0 },
     );
 
-    expect(arrowEnd).toEqual({ x: DEFAULT_DIRECTION_STUB_LENGTH, y: 0 });
+    const arrowAngle = Math.atan2(arrowUnit.y, arrowUnit.x) * 180 / Math.PI;
+    expect(arrowAngle).toBeCloseTo(36);
+  });
+
+  it("positions the arrowhead from the curved shaft's overlap point", () => {
+    const pathPoints = [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: -14 }];
+    const arrowUnit = getDirectionStubArrowUnit(pathPoints, { x: 1, y: 0 });
+    const arrowEnd = getDirectionStubArrowEnd(pathPoints, arrowUnit);
+
+    expect(arrowEnd.x - arrowUnit.x * 14).toBeCloseTo(30);
+    expect(arrowEnd.y - arrowUnit.y * 14).toBeCloseTo(0);
   });
 
   it("makes standard-station stubs slightly longer than interchange stubs", () => {
@@ -199,6 +226,93 @@ describe("direction stub controls", () => {
     expect(circle?.point.y).toBeLessThan(metropolitan!.point.y);
   });
 
+  it("aligns explored shared-path stubs with their revealed coloured lanes", () => {
+    const layout = new CorridorLayout(networkData);
+    const circle = getConnectionBetween("circle", "south-kensington", "sloane-square");
+    const district = getConnectionBetween("district", "south-kensington", "sloane-square");
+    const visibleConnections = [circle, district];
+    const circleOffset = getRevealedDirectionStubOffset(
+      getTestDirectionStub(circle, "south-kensington", layout),
+      visibleConnections,
+      layout,
+    );
+    const districtOffset = getRevealedDirectionStubOffset(
+      getTestDirectionStub(district, "south-kensington", layout),
+      visibleConnections,
+      layout,
+    );
+
+    expect(circleOffset).not.toBeNull();
+    expect(districtOffset).not.toBeNull();
+    expect(Math.abs(circleOffset!)).toBeCloseTo(PARALLEL_LINE_SPACING / 2);
+    expect(Math.abs(districtOffset!)).toBeCloseTo(PARALLEL_LINE_SPACING / 2);
+    expect(circleOffset! * districtOffset!).toBeLessThan(0);
+  });
+
+  it("does not offset a stub until its path is explored on another line", () => {
+    const layout = new CorridorLayout(networkData);
+    const circle = getConnectionBetween("circle", "south-kensington", "sloane-square");
+    const stub = getTestDirectionStub(circle, "south-kensington", layout);
+
+    expect(getRevealedDirectionStubOffset(stub, [], layout)).toBeNull();
+    expect(getRevealedDirectionStubOffset(stub, [circle], layout)).toBeNull();
+  });
+
+  it("aligns stubs with conditionally split shared corridors", () => {
+    const layout = new CorridorLayout(networkData);
+    const metropolitan = getConnectionBetween("metropolitan", "rayners-lane", "eastcote");
+    const piccadilly = getConnectionBetween("piccadilly", "rayners-lane", "eastcote");
+    const visibleConnections = [metropolitan, piccadilly];
+    const metropolitanOffset = getRevealedDirectionStubOffset(
+      getTestDirectionStub(metropolitan, "rayners-lane", layout),
+      visibleConnections,
+      layout,
+    );
+    const piccadillyOffset = getRevealedDirectionStubOffset(
+      getTestDirectionStub(piccadilly, "rayners-lane", layout),
+      visibleConnections,
+      layout,
+    );
+
+    expect(metropolitanOffset).not.toBeNull();
+    expect(piccadillyOffset).not.toBeNull();
+    expect(metropolitanOffset! * piccadillyOffset!).toBeLessThan(0);
+  });
+
+  it("shifts Hammersmith & City upward from Liverpool Street towards Aldgate East", () => {
+    const layout = new CorridorLayout(networkData);
+    const hammersmithCity = getConnectionBetween(
+      "hammersmith-city",
+      "liverpool-street",
+      "aldgate-east",
+    );
+    const circle = getConnectionBetween("circle", "liverpool-street", "aldgate");
+    const stub = getTestDirectionStub(hammersmithCity, "liverpool-street", layout);
+    const shift = getTestRevealedStubShift(stub, [hammersmithCity, circle], layout);
+
+    expect(shift.y).toBeLessThan(0);
+  });
+
+  it("shifts Circle upward from Tower Hill towards Aldgate", () => {
+    const layout = new CorridorLayout(networkData);
+    const circle = getConnectionBetween("circle", "tower-hill", "aldgate");
+    const district = getConnectionBetween("district", "tower-hill", "aldgate-east");
+    const stub = getTestDirectionStub(circle, "tower-hill", layout);
+    const shift = getTestRevealedStubShift(stub, [circle, district], layout);
+
+    expect(shift.y).toBeLessThan(0);
+  });
+
+  it("shifts Circle leftward from Aldgate towards Tower Hill", () => {
+    const layout = new CorridorLayout(networkData);
+    const circle = getConnectionBetween("circle", "aldgate", "tower-hill");
+    const district = getConnectionBetween("district", "aldgate-east", "tower-hill");
+    const stub = getTestDirectionStub(circle, "aldgate", layout);
+    const shift = getTestRevealedStubShift(stub, [circle, district], layout);
+
+    expect(shift.x).toBeLessThan(0);
+  });
+
   it("anchors Stratford Central stubs left and Elizabeth stubs right", () => {
     const layout = new CorridorLayout(networkData);
     const centralMarker = layout.getStationLinePoint("stratford", "central");
@@ -251,6 +365,26 @@ describe("direction stub controls", () => {
 
     expect(exploredConnectionId).toBeDefined();
     expect(departuresAfterExploring.some((connection) => connection.id === exploredConnectionId)).toBe(true);
+  });
+
+  it("hides only the shaft of an already revealed walk stub", () => {
+    const walkConnection: Connection = {
+      id: "walk:a:b",
+      from: "a",
+      to: "b",
+      line: "walk",
+      path: [],
+    };
+    const tubeConnection: Connection = {
+      ...walkConnection,
+      id: "central:a:b",
+      line: "central",
+    };
+    const revealedConnections = new Set([walkConnection.id, tubeConnection.id]);
+
+    expect(shouldHideWalkStubShaft(walkConnection, revealedConnections)).toBe(true);
+    expect(shouldHideWalkStubShaft(walkConnection, new Set())).toBe(false);
+    expect(shouldHideWalkStubShaft(tubeConnection, revealedConnections)).toBe(false);
   });
 });
 
@@ -539,6 +673,48 @@ function getPolylineMidpoint(points: Point[]): Point {
   return {
     x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
     y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
+  };
+}
+
+function getConnectionBetween(
+  line: LineId,
+  firstStationId: string,
+  secondStationId: string,
+): Connection {
+  const connection = networkData.connections.find(
+    (candidate) =>
+      candidate.line === line &&
+      ((candidate.from === firstStationId && candidate.to === secondStationId) ||
+        (candidate.from === secondStationId && candidate.to === firstStationId)),
+  );
+  if (!connection) throw new Error(`Missing ${line} connection ${firstStationId} -> ${secondStationId}`);
+  return connection;
+}
+
+function getTestDirectionStub(
+  connection: Connection,
+  stationId: string,
+  layout: CorridorLayout,
+): DirectionStubLike {
+  const unit = getDirectionStubUnit(connection, stationId);
+  if (!unit) throw new Error(`Missing stub direction for ${connection.id} from ${stationId}`);
+  return {
+    connection,
+    linePoint: layout.getStationLinePoint(stationId, connection.line),
+    normal: { x: -unit.y, y: unit.x },
+  };
+}
+
+function getTestRevealedStubShift(
+  stub: DirectionStubLike,
+  visibleConnections: readonly Connection[],
+  layout: CorridorLayout,
+): Point {
+  const offset = getRevealedDirectionStubOffset(stub, visibleConnections, layout);
+  expect(offset).not.toBeNull();
+  return {
+    x: stub.normal.x * offset!,
+    y: stub.normal.y * offset!,
   };
 }
 

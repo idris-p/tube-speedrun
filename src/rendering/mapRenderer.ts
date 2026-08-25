@@ -18,6 +18,7 @@ import {
   getCanonicalPath,
   getCanonicalPathKey,
   getCenteredOffset,
+  offsetPolylinePoints,
   PARALLEL_LINE_SPACING,
   PARALLEL_STUB_SPACING,
 } from "./pathOffset";
@@ -244,6 +245,8 @@ export class MapRenderer {
         stubLayer,
         directionStubs,
         isInterchangeStation(currentStation),
+        state.revealedConnections,
+        visibleConnections,
       );
     }
 
@@ -722,6 +725,8 @@ export class MapRenderer {
     layer: SVGGElement,
     stubs: ReturnType<MapRenderer["getDirectionStubs"]>,
     interchange: boolean,
+    revealedConnections: ReadonlySet<string>,
+    visibleConnections: readonly Connection[],
   ): void {
 
     const groups = new Map<string, typeof stubs>();
@@ -740,10 +745,18 @@ export class MapRenderer {
     }
 
     const renderItems = [...groups.values()].flatMap((group) =>
-      group.map((stub, index) => ({
-        stub,
-        offset: getCenteredOffset(index, group.length, PARALLEL_STUB_SPACING),
-      }))
+      group.map((stub, index) => {
+        const revealedLineOffset = getRevealedDirectionStubOffset(
+          stub,
+          visibleConnections,
+          this.corridorLayout,
+        );
+        return {
+          stub,
+          offset: revealedLineOffset ??
+            getCenteredOffset(index, group.length, PARALLEL_STUB_SPACING),
+        };
+      })
     );
     for (const { stub, offset } of renderItems) {
       const targetStationId = stub.connection.from === stub.stationId
@@ -759,6 +772,7 @@ export class MapRenderer {
         offset,
         length: getDirectionStubRenderLength(interchange),
         hitStartInset: getDirectionStubHitStartInset(interchange),
+        hideShaft: shouldHideWalkStubShaft(stub.connection, revealedConnections),
         interaction: {
           direction: stub.direction,
           label: `Travel ${stub.direction} to ${targetStation.name} on the ${LINE_BY_ID[stub.connection.line].name} line`,
@@ -865,6 +879,69 @@ export function compareDirectionStubsByRenderedOffset(
     getDirectionStubRenderedOffsetProjection(second, group, corridorLayout);
 }
 
+export function getRevealedDirectionStubOffset(
+  stub: DirectionStubLike,
+  visibleConnections: readonly Connection[],
+  corridorLayout: CorridorLayout,
+): number | null {
+  if (!visibleConnections.some((connection) => connection.id === stub.connection.id)) {
+    return null;
+  }
+
+  const visibleConnectionIds = new Set(visibleConnections.map((connection) => connection.id));
+  const cameraPoints = corridorLayout.getConnectionCameraPoints(stub.connection);
+  const connectionRenderPoints = corridorLayout.getConnectionRenderPoints(
+    stub.connection,
+    visibleConnectionIds,
+  );
+  const directRenderOffset = dotPoints(
+    getEndpointDelta(cameraPoints, connectionRenderPoints, stub.linePoint),
+    stub.normal,
+  );
+  const sharedCameraPathGroup = groupConnectionsByRenderedPath(
+    visibleConnections.map((connection) => ({
+      connection,
+      points: corridorLayout.getConnectionCameraPoints(connection),
+    })),
+  ).find((group) =>
+    group.some((item) => item.connection.id === stub.connection.id)
+  );
+  const hasSharedCameraPath = sharedCameraPathGroup?.some(
+    (item) => item.connection.line !== stub.connection.line,
+  ) ?? false;
+  if (!hasSharedCameraPath && Math.abs(directRenderOffset) <= 0.01) {
+    return null;
+  }
+
+  const renderedPathGroups = groupConnectionsByRenderedPath(
+    visibleConnections.map((connection) => ({
+      connection,
+      points: corridorLayout.getConnectionRenderPoints(connection, visibleConnectionIds),
+    })),
+  );
+  const sharedPathGroup = renderedPathGroups.find((group) =>
+    group.some((item) => item.connection.id === stub.connection.id)
+  );
+  if (!sharedPathGroup) return null;
+
+  const itemIndex = sharedPathGroup.findIndex(
+    (item) => item.connection.id === stub.connection.id,
+  );
+  const item = sharedPathGroup[itemIndex];
+  if (!item) return null;
+
+  const renderedLinePoints = offsetPolylinePoints(
+    getCanonicalPath(item.points),
+    getCenteredOffset(itemIndex, sharedPathGroup.length, PARALLEL_LINE_SPACING),
+  );
+  const endpointDelta = getEndpointDelta(
+    cameraPoints,
+    renderedLinePoints,
+    stub.linePoint,
+  );
+  return dotPoints(endpointDelta, stub.normal);
+}
+
 function getDirectionStubRenderedOffsetProjection(
   stub: DirectionStubLike,
   group: readonly DirectionStubLike[],
@@ -904,11 +981,12 @@ function getDirectionStubRenderedOffsetProjection(
 }
 
 function getEndpointDelta(cameraPoints: Point[], renderedPoints: Point[], linePoint: Point): Point {
-  const cameraEndpointIndex = isCloserToPoint(cameraPoints[0], linePoint, cameraPoints.at(-1)!)
-    ? 0
-    : cameraPoints.length - 1;
-  const renderedPoint = cameraEndpointIndex === 0 ? renderedPoints[0] : renderedPoints.at(-1)!;
-  const cameraPoint = cameraPoints[cameraEndpointIndex];
+  const cameraPoint = isCloserToPoint(cameraPoints[0], linePoint, cameraPoints.at(-1)!)
+    ? cameraPoints[0]
+    : cameraPoints.at(-1)!;
+  const renderedPoint = isCloserToPoint(renderedPoints[0], linePoint, renderedPoints.at(-1)!)
+    ? renderedPoints[0]
+    : renderedPoints.at(-1)!;
   return subtractPoints(renderedPoint, cameraPoint);
 }
 
@@ -1276,6 +1354,13 @@ export function getDirectionStubStart(
   linePoint: Point,
 ): Point {
   return markerGroups.find((group) => group.lines.includes(lineId))?.point ?? linePoint;
+}
+
+export function shouldHideWalkStubShaft(
+  connection: Connection,
+  revealedConnections: ReadonlySet<string>,
+): boolean {
+  return connection.line === "walk" && revealedConnections.has(connection.id);
 }
 
 export function getDirectionStubRoutePoints(points: Point[], linePoint: Point): Point[] {

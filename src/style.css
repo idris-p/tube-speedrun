@@ -234,6 +234,10 @@ svg text {
   opacity: 1;
 }
 
+.direction-stub-shaft-hidden {
+  opacity: 0;
+}
+
 .direction-stub-control {
   outline: none;
   transform-box: view-box;
