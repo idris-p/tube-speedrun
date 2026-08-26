@@ -34,6 +34,7 @@ import {
 
 export {
   DEFAULT_DIRECTION_STUB_LENGTH,
+  getDirectionStubHitPathPoints,
   getStubArrowHeadPoints,
   getStubShaftEnd,
 } from "./directionStubRenderer";
@@ -143,6 +144,7 @@ export class MapRenderer {
     completionInteractionLocked = false,
     targetArrivalCelebration = false,
     directionStubsInteractive = true,
+    visibleDirectionStubConnectionIds: ReadonlySet<string> | null = null,
   ): void {
     const wasMenuPreview = this.svg.classList.contains("tube-map-menu-preview");
     if (this.renderedSeed !== state.seed) {
@@ -245,6 +247,9 @@ export class MapRenderer {
         state.currentStationId,
         state.selectedLineId,
         state.revealedConnections,
+      ).filter((stub) =>
+        visibleDirectionStubConnectionIds === null ||
+        visibleDirectionStubConnectionIds.has(stub.connection.id)
       );
       this.renderDirectionStubs(
         stubLayer,
@@ -784,6 +789,7 @@ export class MapRenderer {
         unit: stub.unit,
         normal: stub.normal,
         routePoints: stub.routePoints,
+        hitRoutePoints: stub.routePoints,
         offset,
         length: getDirectionStubRenderLength(interchange),
         hitStartInset: getDirectionStubHitStartInset(interchange),
@@ -797,6 +803,7 @@ export class MapRenderer {
       });
       control.dataset.connectionId = stub.connection.id;
       control.dataset.targetStationId = targetStation.id;
+      control.dataset.stubDirection = stub.direction;
     }
   }
 

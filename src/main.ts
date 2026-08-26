@@ -11,9 +11,16 @@ import {
 } from "./game/completionCelebration";
 import { generateRoundConfigs, generateSeed } from "./game/seed";
 import { ROUND_COUNT, type RoundStats, type RunResults, type RunState } from "./game/RunState";
+import {
+  attemptTutorialMoveInDirection,
+  createTutorialGameState,
+  getTutorialInstructions,
+  TUTORIAL_CONNECTION_IDS,
+} from "./game/tutorial";
 import { cycleSelectedLine, getLineCyclePreview } from "./game/lineSelection";
 import {
   attemptMoveInDirection,
+  findDirectionalNeighbour,
   MOVEMENT_DIRECTIONS,
   type MovementDirection,
 } from "./game/movement";
@@ -48,6 +55,7 @@ inject();
 injectSpeedInsights();
 
 const REJECTED_MOVE_FLASH_MS = 180;
+const TOUCH_MOVE_STUB_FEEDBACK_MS = 100;
 const COUNTDOWN_STEP_MS = 700;
 const COUNTDOWN_START_VALUE = 3;
 const LINE_SWITCH_CAMERA_PAN_SPEED = 1 / 160;
@@ -94,6 +102,7 @@ let state: GameState | null = null;
 let runState: RunState | null = null;
 let results: RunResults | null = null;
 let mapViewerActive = false;
+let tutorialActive = false;
 let completionCelebration: CompletionCelebration | null = null;
 let countdown: { run: RunState; startedAt: number } | null = null;
 let moveSelection = createStubSelectionState();
@@ -105,6 +114,13 @@ let lastPanPoint: Point | null = null;
 const mapTouchPoints = new Map<number, Point>();
 let mapPinchGesture: PinchGesture | null = null;
 let touchGameplayGesture: TouchGameplayGesture | null = null;
+let touchMoveStubFeedback: {
+  stub: SVGGElement;
+  direction: MovementDirection;
+  stationId: string;
+  lineId: GameState["selectedLineId"];
+  timeoutId: number;
+} | null = null;
 let lineRevealAnimation: {
   connectionId: string;
   fromStationId: string;
@@ -134,12 +150,14 @@ const touchGameplayControlsQuery = window.matchMedia("(hover: none) and (pointer
 const hud = new Hud(appRoot, networkData, {
   onStartRandomSeed: () => startRun(generateSeed(), "random"),
   onStartSeed: (seed) => startRun(seed, "set"),
+  onStartTutorial: () => startTutorial(),
   onOpenMap: () => {
     state = null;
     runState = null;
     results = null;
     countdown = null;
     mapViewerActive = true;
+    tutorialActive = false;
     resetRunTransientState();
     renderer.resetExplorerView();
     hud.showMapViewer();
@@ -158,6 +176,7 @@ const hud = new Hud(appRoot, networkData, {
     results = null;
     countdown = null;
     mapViewerActive = false;
+    tutorialActive = false;
     resetRunTransientState();
     hud.showMenu();
     render();
@@ -168,6 +187,7 @@ const hud = new Hud(appRoot, networkData, {
     results = null;
     countdown = null;
     mapViewerActive = false;
+    tutorialActive = false;
     resetRunTransientState();
     hud.showSeedChoiceMenu();
     render();
@@ -333,6 +353,7 @@ function resetGameplayMapGesture(): void {
 
 function startRun(seed: string, seedSource: RunState["seedSource"]): void {
   mapViewerActive = false;
+  tutorialActive = false;
   runState = {
     seed,
     seedSource,
@@ -343,6 +364,17 @@ function startRun(seed: string, seedSource: RunState["seedSource"]): void {
   results = null;
   state = null;
   countdown = { run: runState, startedAt: performance.now() };
+  resetRunTransientState();
+  render();
+}
+
+function startTutorial(): void {
+  mapViewerActive = false;
+  tutorialActive = true;
+  runState = null;
+  results = null;
+  countdown = null;
+  state = createTutorialGameState(networkData, performance.now());
   resetRunTransientState();
   render();
 }
@@ -413,22 +445,27 @@ function render(now = performance.now()): void {
   } else if (results) {
     renderer.renderMenuPreview(now);
     hud.showResults(results);
-  } else if (state && runState) {
-    if (hud.isGameplayHelpOpen()) {
-      renderer.renderMenuPreview(now);
-    } else {
-      renderer.render(
-        state,
-        getActiveLineRevealAnimation(now),
-        getActiveStationWipeAnimation(now),
-        getActiveCameraPanAnimation(now),
-        completionCelebration !== null,
-        completionCelebration !== null && completionCelebration.startedAt !== null,
-        !touchGameplayControlsQuery.matches,
-      );
-      refreshHoveredMoveStub();
-    }
-    hud.update(state, now, runState, completionCelebration === null);
+  } else if (state) {
+    renderer.render(
+      state,
+      getActiveLineRevealAnimation(now),
+      getActiveStationWipeAnimation(now),
+      getActiveCameraPanAnimation(now),
+      completionCelebration !== null,
+      completionCelebration !== null && completionCelebration.startedAt !== null,
+      !touchGameplayControlsQuery.matches,
+      tutorialActive ? TUTORIAL_CONNECTION_IDS : null,
+    );
+    refreshHoveredMoveStub();
+    hud.update(
+      state,
+      now,
+      runState,
+      completionCelebration === null,
+      tutorialActive
+        ? getTutorialInstructions(state, touchGameplayControlsQuery.matches)
+        : null,
+    );
   } else if (countdown) {
     renderer.renderMenuPreview(now);
     hud.showCountdown(getCountdownValue(countdown, now));
@@ -448,7 +485,7 @@ function tick(): void {
     } else {
       render(now);
     }
-  } else if (state && runState) {
+  } else if (state) {
     const hadLineRevealAnimation = lineRevealAnimation !== null;
     const hadStationWipeAnimation = stationWipeAnimation !== null;
     const hadCameraPanAnimation = cameraPanAnimation !== null;
@@ -485,12 +522,19 @@ function tick(): void {
       hadStationWipeAnimation ||
       hadCameraPanAnimation ||
       nextCompletionCelebration.changed ||
-      hud.isGameplayHelpOpen() ||
       renderer.svg.classList.contains("tube-map-menu-preview")
     ) {
       render(now);
     } else {
-      hud.update(state, now, runState, completionCelebration === null);
+      hud.update(
+        state,
+        now,
+        runState,
+        completionCelebration === null,
+        tutorialActive
+          ? getTutorialInstructions(state, touchGameplayControlsQuery.matches)
+          : null,
+      );
     }
   } else if (results || !state) {
     renderer.renderMenuPreview(now);
@@ -592,6 +636,7 @@ function changeSelectedLine(direction: -1 | 1): void {
     return;
   }
 
+  cancelTouchMoveStubFeedback();
   cancelMovePointerSelection();
   const previousState = state;
   state = cycleSelectedLine(state, networkData, direction);
@@ -679,7 +724,9 @@ function attemptMoveFromStub(direction: MovementDirection, now: number): boolean
   const fromStationId = state.currentStationId;
   const selectedLineId = state.selectedLineId;
   const revealedConnectionsBeforeMove = state.revealedConnections;
-  const result = attemptMoveInDirection(state, networkData, direction, now);
+  const result = tutorialActive
+    ? attemptTutorialMoveInDirection(state, networkData, direction, now)
+    : attemptMoveInDirection(state, networkData, direction, now);
   state = result.state;
 
   if (result.moved && result.targetStationId) {
@@ -769,6 +816,7 @@ function canSelectMovementStub(): boolean {
   return !mapViewerActive &&
     Boolean(state && !state.completed) &&
     !hud.isGameplayOverlayOpen() &&
+    touchMoveStubFeedback === null &&
     lineRevealAnimation === null &&
     cameraPanAnimation === null;
 }
@@ -945,7 +993,8 @@ function canUseTouchGameplayControls(): boolean {
   return touchGameplayControlsQuery.matches &&
     !mapViewerActive &&
     Boolean(state && !state.completed) &&
-    !hud.isGameplayOverlayOpen();
+    !hud.isGameplayOverlayOpen() &&
+    touchMoveStubFeedback === null;
 }
 
 function canCycleLineWithTouch(): boolean {
@@ -976,8 +1025,10 @@ function endTouchGameplayPointer(event: PointerEvent, performAction: boolean): b
   touchGameplayGesture = null;
 
   if (action?.type === "move") {
-    attemptMoveFromStub(action.direction, performance.now());
-    render();
+    if (!showTouchMoveStubFeedback(action.direction)) {
+      attemptMoveFromStub(action.direction, performance.now());
+      render();
+    }
   } else if (action?.type === "cycle-line" && canCycleLineWithTouch()) {
     changeSelectedLine(action.offset);
   }
@@ -992,6 +1043,67 @@ function resetTouchGameplayGesture(): void {
     renderer.svg.releasePointerCapture(pointerId);
   }
   touchGameplayGesture = null;
+  cancelTouchMoveStubFeedback();
+}
+
+function showTouchMoveStubFeedback(direction: MovementDirection): boolean {
+  if (!state || !canSelectMovementStub()) {
+    return false;
+  }
+
+  const target = findDirectionalNeighbour(
+    networkData,
+    state.currentStationId,
+    state.selectedLineId,
+    direction,
+  );
+  if (!target) {
+    return false;
+  }
+
+  const stub = Array.from(
+    renderer.svg.querySelectorAll<SVGGElement>(".direction-stub-control[data-stub-direction]"),
+  ).find((candidate) =>
+    candidate.dataset.stubDirection === direction &&
+    candidate.dataset.targetStationId === target.id
+  );
+  if (!stub) {
+    return false;
+  }
+
+  const stationId = state.currentStationId;
+  const lineId = state.selectedLineId;
+  stub.classList.add("direction-stub-touch-feedback");
+  const timeoutId = window.setTimeout(() => {
+    const feedback = touchMoveStubFeedback;
+    if (!feedback || feedback.stub !== stub) {
+      return;
+    }
+
+    feedback.stub.classList.remove("direction-stub-touch-feedback");
+    touchMoveStubFeedback = null;
+    if (
+      state?.currentStationId !== feedback.stationId ||
+      state.selectedLineId !== feedback.lineId
+    ) {
+      return;
+    }
+
+    attemptMoveFromStub(feedback.direction, performance.now());
+    render();
+  }, TOUCH_MOVE_STUB_FEEDBACK_MS);
+  touchMoveStubFeedback = { stub, direction, stationId, lineId, timeoutId };
+  return true;
+}
+
+function cancelTouchMoveStubFeedback(): void {
+  if (!touchMoveStubFeedback) {
+    return;
+  }
+
+  window.clearTimeout(touchMoveStubFeedback.timeoutId);
+  touchMoveStubFeedback.stub.classList.remove("direction-stub-touch-feedback");
+  touchMoveStubFeedback = null;
 }
 
 function endPan(event: PointerEvent): void {

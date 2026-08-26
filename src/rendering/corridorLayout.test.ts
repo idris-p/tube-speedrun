@@ -779,6 +779,41 @@ describe("shared corridor layout", () => {
     }
   });
 
+  it("keeps the reveal camera moving directly between Great Portland Street and Baker Street", () => {
+    const layout = new CorridorLayout(networkData);
+    const expectedCameraPoints = [
+      gridPointToSvgPoint({ x: 50, y: -22 }),
+      gridPointToSvgPoint({ x: 44, y: -22 }),
+    ];
+
+    for (const line of ["circle", "hammersmith-city"] as const) {
+      const connection = findConnection(line, "great-portland-street", "baker-street");
+      expect(layout.getConnectionCameraPoints(connection)).toEqual(expectedCameraPoints);
+    }
+  });
+
+  it("removes immediate reversals from every reveal camera path", () => {
+    const layout = new CorridorLayout(networkData);
+
+    for (const connection of networkData.connections) {
+      const points = layout.getConnectionCameraPoints(connection);
+      for (let index = 1; index < points.length - 1; index += 1) {
+        const incoming = {
+          x: points[index].x - points[index - 1].x,
+          y: points[index].y - points[index - 1].y,
+        };
+        const outgoing = {
+          x: points[index + 1].x - points[index].x,
+          y: points[index + 1].y - points[index].y,
+        };
+        expect(
+          incoming.x * outgoing.x + incoming.y * outgoing.y,
+          connection.id,
+        ).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
   it("uses H&C Circle Metropolitan order when two Baker Street subsurface lines are explored", () => {
     const layout = new CorridorLayout(networkData);
     const orderedPairs = [

@@ -5,23 +5,12 @@ import {
   filterMapSearchEntries,
   findMapSearchStationId,
   getPreviousMenuMode,
-  shouldShowGameplayHelpButton,
 } from "./hud";
 
 describe("main menu navigation", () => {
-  it("returns from How to Play to the main menu", () => {
-    expect(getPreviousMenuMode("how-to-play")).toBe("home");
-  });
-
   it("keeps the nested seed entry back path intact", () => {
     expect(getPreviousMenuMode("seed-entry")).toBe("seed-choice");
     expect(getPreviousMenuMode("seed-choice")).toBe("home");
-  });
-
-  it("shows gameplay help only while an unfinished round is active and the tutorial is closed", () => {
-    expect(shouldShowGameplayHelpButton(false, false)).toBe(true);
-    expect(shouldShowGameplayHelpButton(false, true)).toBe(false);
-    expect(shouldShowGameplayHelpButton(true, false)).toBe(false);
   });
 });
 

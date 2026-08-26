@@ -229,6 +229,46 @@ svg text {
   display: none;
 }
 
+.tutorial-instructions {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  width: 100%;
+  color: #111111;
+  font-size: clamp(17px, 1.7vw, 22px);
+  font-weight: 850;
+  line-height: 1.2;
+  text-align: center;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.tutorial-instructions > span {
+  width: 100%;
+  text-align: center;
+}
+
+.tutorial-instructions[hidden] {
+  display: none;
+}
+
+.tutorial-active .hud-timer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+.tutorial-active .hud-timer[hidden] {
+  display: none;
+}
+
+.tutorial-active .hud-timer .metric {
+  display: none;
+}
+
 .hud-left {
   left: 18px;
   bottom: 18px;
@@ -719,7 +759,6 @@ svg text {
 }
 
 .gameplay-exit-button,
-.gameplay-help-button,
 .gameplay-map-button {
   position: absolute;
   z-index: 21;
@@ -790,21 +829,11 @@ svg text {
   left: var(--gameplay-ui-inset);
 }
 
-.gameplay-help-button {
-  right: var(--gameplay-ui-inset);
-  padding-bottom: 2px;
-  font-size: 28px;
-  font-weight: 900;
-  line-height: 1;
-}
-
 .gameplay-map-button {
-  top: calc(var(--gameplay-ui-inset) + var(--gameplay-control-size) + var(--gameplay-control-gap));
   right: var(--gameplay-ui-inset);
 }
 
 .gameplay-exit-button[hidden],
-.gameplay-help-button[hidden],
 .gameplay-map-button[hidden] {
   display: none;
 }
@@ -817,7 +846,6 @@ svg text {
 }
 
 .gameplay-exit-button:active,
-.gameplay-help-button:active,
 .gameplay-map-button:active {
   transform: translateY(4px);
   box-shadow: none;
@@ -1205,276 +1233,6 @@ svg text {
   display: grid;
   gap: 14px;
   width: min(300px, 100%);
-}
-
-.main-menu[data-menu-mode="how-to-play"] {
-  --how-to-play-scale: 1;
-  --tutorial-visual-height: 210px;
-  padding: 18px 24px 24px;
-}
-
-.main-menu[data-menu-mode="how-to-play"] .main-menu-content {
-  top: 50%;
-  bottom: auto;
-  grid-template-rows: minmax(0, 1fr);
-  gap: 0;
-  width: 900px;
-  height: 450px;
-  transform: translate(-50%, -50%) scale(var(--how-to-play-scale));
-  transform-origin: center;
-}
-
-.main-menu[data-menu-mode="how-to-play"] .main-menu-actions {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-}
-
-.how-to-play-carousel {
-  --tutorial-line-cycle-duration: 6s;
-  --tutorial-direction-cycle-duration: 16s;
-  display: grid;
-  grid-template-columns: 54px minmax(0, 1fr) 54px;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 16px 14px;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-}
-
-.how-to-play-viewport {
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  padding: 0 0 5px;
-}
-
-.how-to-play-list {
-  display: flex;
-  width: 100%;
-  height: 100%;
-  transition: transform 260ms ease;
-}
-
-.how-to-play-instruction {
-  flex: 0 0 100%;
-  display: grid;
-  grid-template-rows: auto auto;
-  gap: 9px;
-  align-content: center;
-  align-items: center;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  border: 2px solid #111111;
-  border-radius: 12px;
-  padding: 12px 36px 28px;
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 4px 0 #111111;
-}
-
-.how-to-play-arrow {
-  align-self: center;
-  display: grid;
-  place-items: center;
-  width: 54px;
-  height: 54px;
-  border: 2px solid #111111;
-  border-radius: 8px;
-  padding: 0;
-  background: #ffffff;
-  color: #111111;
-  font-size: 28px;
-  font-weight: 900;
-  line-height: 1;
-  box-shadow: 0 4px 0 #111111;
-}
-
-.how-to-play-arrow:active:not(:disabled) {
-  transform: translateY(4px);
-  box-shadow: none;
-}
-
-.how-to-play-arrow:disabled {
-  opacity: 0.35;
-}
-
-.how-to-play-dots {
-  grid-column: 2;
-  grid-row: 2;
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  align-items: center;
-  min-height: 18px;
-}
-
-.how-to-play-dot {
-  width: 13px;
-  height: 13px;
-  border: 2px solid #111111;
-  border-radius: 50%;
-  padding: 0;
-  background: #ffffff;
-}
-
-.how-to-play-dot-active {
-  background: #111111;
-}
-
-.how-to-play-visual {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: var(--tutorial-visual-height);
-  overflow: visible;
-}
-
-.how-to-play-svg {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
-  overflow: visible;
-}
-
-.tutorial-movement {
-  width: 195px;
-  height: 195px;
-  pointer-events: none;
-}
-
-.tutorial-movement * {
-  cursor: default;
-  pointer-events: none;
-}
-
-.tutorial-station-markers {
-  width: 360px;
-  height: 205px;
-}
-
-.tutorial-line-selection {
-  width: 205px;
-  height: 205px;
-}
-
-.tutorial-mouse-cursor {
-  filter: drop-shadow(0 0 0.5px rgba(17, 17, 17, 0.55));
-  pointer-events: none;
-}
-
-.tutorial-line-stubs {
-  opacity: 0;
-  animation-duration: var(--tutorial-line-cycle-duration);
-  animation-timing-function: step-end;
-  animation-iteration-count: infinite;
-}
-
-.tutorial-line-stubs-central {
-  opacity: 1;
-  animation-name: tutorial-central-stubs;
-}
-
-.tutorial-line-stubs-victoria {
-  animation-name: tutorial-victoria-stubs;
-}
-
-.tutorial-line-stubs-district {
-  animation-name: tutorial-district-stubs;
-}
-
-.tutorial-line-selection .current-station-highlight {
-  animation: tutorial-line-cycle var(--tutorial-line-cycle-duration) step-end infinite;
-}
-
-@keyframes tutorial-line-cycle {
-  0%,
-  100% {
-    stroke: #e32017;
-  }
-
-  33.333% {
-    stroke: #0098d4;
-  }
-
-  66.667% {
-    stroke: #00782a;
-  }
-}
-
-@keyframes tutorial-central-stubs {
-  0%,
-  33.332%,
-  100% {
-    opacity: 1;
-  }
-
-  33.333%,
-  99.999% {
-    opacity: 0;
-  }
-}
-
-@keyframes tutorial-victoria-stubs {
-  0%,
-  33.332%,
-  66.667%,
-  100% {
-    opacity: 0;
-  }
-
-  33.333%,
-  66.666% {
-    opacity: 1;
-  }
-}
-
-@keyframes tutorial-district-stubs {
-  0%,
-  66.666%,
-  100% {
-    opacity: 0;
-  }
-
-  66.667%,
-  99.999% {
-    opacity: 1;
-  }
-}
-
-.how-to-play-copy {
-  justify-self: center;
-  width: min(660px, 100%);
-  min-width: 0;
-  text-align: left;
-}
-
-.how-to-play-copy h2 {
-  margin: 0 0 10px;
-  color: #111111;
-  font-size: 30px;
-  font-weight: 900;
-  line-height: 1;
-}
-
-.how-to-play-copy p {
-  margin: 0;
-  color: #252525;
-  font-size: 19px;
-  font-weight: 400;
-  line-height: 1.3;
-}
-
-.tutorial-gameplay-timer {
-  position: relative;
-  right: auto;
-  bottom: auto;
-  transform: scale(1.25);
-  transform-origin: center;
-}
-
-.tutorial-gameplay-timer:hover {
-  opacity: 1;
 }
 
 .main-menu-social-links {
@@ -2029,6 +1787,14 @@ svg text {
   .line-cycle-icon-next {
     border-left-width: 15px;
   }
+
+  .tutorial-active .line-cycle-controls {
+    display: none !important;
+  }
+
+  .tutorial-instructions {
+    font-size: clamp(17px, 2.7vmin, 23px);
+  }
 }
 
 @media (hover: none) and (pointer: coarse) and (orientation: landscape) and (max-width: 1400px) {
@@ -2094,7 +1860,6 @@ svg text {
   }
 
   .gameplay-exit-button,
-  .gameplay-help-button,
   .gameplay-map-button {
     width: var(--gameplay-control-size);
     height: var(--gameplay-control-size);
@@ -2148,10 +1913,6 @@ svg text {
   .gameplay-map-button .button-icon {
     width: clamp(26px, 3.3vmin, 34px);
     height: clamp(26px, 3.3vmin, 34px);
-  }
-
-  .gameplay-help-button {
-    font-size: clamp(28px, 3.5vmin, 36px);
   }
 
   .hud-left,
@@ -2235,15 +1996,9 @@ svg text {
   }
 
   .gameplay-exit-button,
-  .gameplay-help-button,
   .gameplay-map-button {
     border-radius: 7px;
     box-shadow: 0 3px 0 #111111;
-  }
-
-  .gameplay-help-button {
-    padding-bottom: 1px;
-    font-size: 24px;
   }
 
   .gameplay-exit-button .button-icon,
@@ -2570,7 +2325,7 @@ svg text {
   }
 
   .gameplay-exit-button,
-  .gameplay-help-button {
+  .gameplay-map-button {
     top: var(--touch-safe-top);
   }
 
@@ -2578,13 +2333,8 @@ svg text {
     left: var(--touch-safe-left);
   }
 
-  .gameplay-help-button,
   .gameplay-map-button {
     right: var(--touch-safe-right);
-  }
-
-  .gameplay-map-button {
-    top: calc(var(--touch-safe-top) + var(--gameplay-control-size) + var(--gameplay-control-gap));
   }
 
   .dismissed-round-action {
@@ -2697,6 +2447,14 @@ svg text {
     opacity: 0 !important;
     transition: none;
   }
+
+  .tube-map-running .direction-stub-control.direction-stub-touch-feedback {
+    transform: scale(1.14) !important;
+  }
+
+  .tube-map-running .direction-stub-touch-feedback .direction-stub-arrowhead {
+    opacity: 1 !important;
+  }
 }
 
 /* Tablet foundation shared by both supported orientations. */
@@ -2708,14 +2466,9 @@ svg text {
   }
 
   .gameplay-exit-button,
-  .gameplay-help-button,
   .gameplay-map-button {
     width: var(--gameplay-control-size);
     height: var(--gameplay-control-size);
-  }
-
-  .gameplay-help-button {
-    font-size: clamp(28px, 3.5vmin, 36px);
   }
 
   .gameplay-exit-button .button-icon,
@@ -2792,13 +2545,9 @@ svg text {
     transform: translate(-50%, -50%);
   }
 
-  .main-menu[data-menu-mode="how-to-play"] .main-menu-content {
-    gap: 0;
-    transform: translate(-50%, -50%) scale(var(--how-to-play-scale));
-  }
 }
 
-/* Tablet portrait restructures the HUD and tutorial instead of shrinking landscape UI. */
+/* Tablet portrait restructures the HUD instead of shrinking landscape UI. */
 @media (hover: none) and (pointer: coarse) and (orientation: portrait) and (min-width: 601px) and (max-width: 1400px) {
   :root {
     --tablet-portrait-hud-half-gap: clamp(5px, 0.75vmin, 7px);
@@ -2868,23 +2617,6 @@ svg text {
     font-size: clamp(92px, 14vw, 118px);
   }
 
-  .main-menu[data-menu-mode="how-to-play"] {
-    --tutorial-visual-height: 330px;
-    padding-top: calc(var(--touch-safe-top) + 64px);
-  }
-
-  .main-menu[data-menu-mode="how-to-play"] .main-menu-content {
-    width: 720px;
-    height: 720px;
-    gap: 0;
-    transform: translate(-50%, -50%) scale(var(--how-to-play-scale));
-  }
-
-  .how-to-play-instruction {
-    gap: 20px;
-    padding: 28px 48px 40px;
-  }
-
   .completion-overlay {
     padding: clamp(26px, 4vmin, 36px);
   }
@@ -2905,16 +2637,11 @@ svg text {
   }
 
   .gameplay-exit-button,
-  .gameplay-help-button,
   .gameplay-map-button {
     width: var(--gameplay-control-size);
     height: var(--gameplay-control-size);
     border-radius: 7px;
     box-shadow: 0 3px 0 #111111;
-  }
-
-  .gameplay-help-button {
-    font-size: clamp(23px, 7vw, 28px);
   }
 
   .gameplay-exit-button .button-icon,
@@ -2977,17 +2704,9 @@ svg text {
   }
 
   .gameplay-exit-button,
-  .gameplay-help-button {
-    top: calc(
-      var(--touch-safe-top) + var(--phone-carousel-height) + var(--gameplay-control-gap)
-    );
-  }
-
   .gameplay-map-button {
     top: calc(
-      var(--touch-safe-top) + var(--phone-carousel-height) +
-        var(--gameplay-control-gap) + var(--gameplay-control-size) +
-        var(--gameplay-control-gap)
+      var(--touch-safe-top) + var(--phone-carousel-height) + var(--gameplay-control-gap)
     );
   }
 
@@ -3049,6 +2768,16 @@ svg text {
     grid-template-columns: minmax(0, 1.35fr) repeat(2, minmax(0, 0.8fr));
   }
 
+  .tutorial-active .hud-left {
+    bottom: var(--touch-safe-bottom);
+  }
+
+  .tutorial-active .hud-timer {
+    bottom: calc(
+      var(--touch-safe-bottom) + var(--phone-hud-row-height) + var(--phone-hud-gap)
+    );
+  }
+
   .metric-label {
     font-size: clamp(8px, 2.4vw, 10px);
   }
@@ -3059,6 +2788,10 @@ svg text {
 
   .hud-timer .metric-value {
     font-size: clamp(21px, 6.5vw, 27px);
+  }
+
+  .tutorial-instructions {
+    font-size: clamp(15px, 4.5vw, 19px);
   }
 
   .main-menu-content {
@@ -3100,43 +2833,6 @@ svg text {
   .main-menu-social-link {
     width: 40px;
     height: 40px;
-  }
-
-  .main-menu[data-menu-mode="how-to-play"] {
-    --tutorial-visual-height: 250px;
-    padding-top: calc(var(--touch-safe-top) + 54px);
-  }
-
-  .main-menu[data-menu-mode="how-to-play"] .main-menu-content {
-    top: calc(50% + 12px);
-    width: 360px;
-    height: 620px;
-    gap: 0;
-    transform: translate(-50%, -50%) scale(var(--how-to-play-scale));
-  }
-
-  .how-to-play-carousel {
-    grid-template-columns: 44px minmax(0, 1fr) 44px;
-    gap: 12px 8px;
-  }
-
-  .how-to-play-arrow {
-    width: 44px;
-    height: 44px;
-  }
-
-  .how-to-play-instruction {
-    gap: 12px;
-    padding: 14px 18px 24px;
-  }
-
-  .how-to-play-copy h2 {
-    font-size: 25px;
-  }
-
-  .how-to-play-copy p {
-    font-size: 17px;
-    line-height: 1.25;
   }
 
   .countdown-value {
@@ -3499,19 +3195,5 @@ svg text {
   .completion-close {
     top: var(--touch-safe-top);
     right: var(--touch-safe-right);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tutorial-line-selection .current-station-highlight {
-    animation: none;
-  }
-
-  .tutorial-line-stubs {
-    animation: none;
-  }
-
-  .how-to-play-list {
-    transition: none;
   }
 }

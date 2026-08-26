@@ -9,6 +9,7 @@ import {
   getAvailableDirectionConnections,
   getDirectionStubStart,
   getDirectionStubHitStartInset,
+  getDirectionStubHitPathPoints,
   getRevealedDirectionStubOffset,
   getDirectionStubRenderLength,
   getDirectionStubRoutePoints,
@@ -144,6 +145,19 @@ describe("direction stub controls", () => {
       .toBeUndefined();
     expect(getExploredDirectionStubRoutePoints(connectionId, routePoints, new Set([connectionId])))
       .toBe(routePoints);
+  });
+
+  it("extends the hit path of an explored stub to the next station", () => {
+    const points = getDirectionStubHitPathPoints(
+      [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 80, y: 40 }],
+      { x: 4, y: 2 },
+      { x: 0, y: 1 },
+      3,
+    );
+
+    expect(points[0]).toEqual({ x: 4, y: 5 });
+    expect(points.at(-1)).toEqual({ x: 80, y: 43 });
+    expect(getTestPolylineLength(points)).toBeGreaterThan(DEFAULT_DIRECTION_STUB_LENGTH);
   });
 
   it("follows bends beside Mornington Crescent while preserving stub length", () => {

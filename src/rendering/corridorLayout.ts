@@ -177,6 +177,8 @@ export class CorridorLayout {
 
   private readonly connectionPoints = new Map<string, Point[]>();
 
+  private readonly connectionCameraPoints = new Map<string, Point[]>();
+
   private readonly stationLinePoints = new Map<string, Point>();
 
   constructor(
@@ -227,7 +229,12 @@ export class CorridorLayout {
   }
 
   getConnectionCameraPoints(connection: Connection): Point[] {
-    return this.getConnectionPoints(connection);
+    const cached = this.connectionCameraPoints.get(connection.id);
+    if (cached) return cached;
+
+    const points = removeCameraPathBacktracking(this.getConnectionPoints(connection));
+    this.connectionCameraPoints.set(connection.id, points);
+    return points;
   }
 
   getConnectionSegmentOffsets(connection: Connection): number[] {
@@ -572,6 +579,29 @@ export class CorridorLayout {
     if (!station) throw new Error(`Unknown station: ${stationId}`);
     return gridPointToSvgPoint(station);
   }
+}
+
+export function removeCameraPathBacktracking(points: readonly Point[]): Point[] {
+  const result = points.map((point) => ({ ...point }));
+  let index = 1;
+
+  while (index < result.length - 1) {
+    const previous = result[index - 1];
+    const current = result[index];
+    const next = result[index + 1];
+    const incoming = { x: current.x - previous.x, y: current.y - previous.y };
+    const outgoing = { x: next.x - current.x, y: next.y - current.y };
+    const dotProduct = incoming.x * outgoing.x + incoming.y * outgoing.y;
+
+    if (dotProduct < -POINT_TOLERANCE) {
+      result.splice(index, 1);
+      index = Math.max(1, index - 1);
+      continue;
+    }
+    index += 1;
+  }
+
+  return simplifyPolylinePoints(result);
 }
 
 function getMarkerAdjustedStraightPath(path: GridPoint[], start: Point, end: Point): Point[] | null {

@@ -23,6 +23,7 @@ export type DirectionStubRenderOptions = {
   unit: Point;
   normal?: Point;
   routePoints?: Point[];
+  hitRoutePoints?: Point[];
   offset?: number;
   length?: number;
   hitStartInset?: number;
@@ -41,6 +42,7 @@ export function renderDirectionStub(
     unit,
     normal = { x: -unit.y, y: unit.x },
     routePoints,
+    hitRoutePoints,
     offset = 0,
     length = DEFAULT_DIRECTION_STUB_LENGTH,
     hitStartInset = 0,
@@ -53,7 +55,14 @@ export function renderDirectionStub(
   const arrowUnit = getDirectionStubArrowUnit(pathPoints, unit);
   const arrowNormal = { x: -arrowUnit.y, y: arrowUnit.x };
   const arrowEnd = getDirectionStubArrowEnd(pathPoints, arrowUnit);
-  const hitPathPoints = getPolylineSlice(pathPoints, hitStartInset, length);
+  const fullHitPathPoints = hitRoutePoints
+    ? getDirectionStubHitPathPoints(hitRoutePoints, start, normal, offset)
+    : pathPoints;
+  const hitPathPoints = getPolylineSlice(
+    fullHitPathPoints,
+    hitStartInset,
+    getPolylineLength(fullHitPathPoints),
+  );
   const shaftPathPoints = getPolylineSlice(
     pathPoints,
     0,
@@ -146,6 +155,26 @@ export function getDirectionStubPathPoints(
   }));
   const sampledRoute = sampleRoundedPathPoints(alignedRoute, STUB_CORNER_RADIUS);
   return extendAndCropPolyline(sampledRoute, length, unit);
+}
+
+export function getDirectionStubHitPathPoints(
+  routePoints: Point[],
+  start: Point,
+  normal: Point,
+  offset: number,
+): Point[] {
+  const offsetStart = {
+    x: start.x + normal.x * offset,
+    y: start.y + normal.y * offset,
+  };
+  if (routePoints.length < 2) return [offsetStart];
+
+  const offsetRoute = routePoints.map((point) => ({
+    x: point.x + normal.x * offset,
+    y: point.y + normal.y * offset,
+  }));
+  offsetRoute[0] = offsetStart;
+  return sampleRoundedPathPoints(offsetRoute, STUB_CORNER_RADIUS);
 }
 
 export function getStubArrowHeadPoints(end: Point, unit: Point, normal: Point): Point[] {
