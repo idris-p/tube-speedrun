@@ -735,7 +735,7 @@ describe("network data validation", () => {
     expect(bethnalGreen).toMatchObject({
       x: 124,
       y: -14,
-      labelOffset: { x: -59.93, y: -24 },
+      labelOffset: { x: 0, y: -24 },
     });
     expect(bethnalGreen?.y).toBe(mileEnd?.y);
     expect(findConnectionPath("central", "bethnal-green", "mile-end")).toEqual([
@@ -1664,6 +1664,25 @@ describe("network data validation", () => {
     );
 
     expect(connection?.path).toContainEqual({ x: westKensington.x, y: westKensington.y });
+  });
+
+  it("moves West Kensington and its label two cells right", () => {
+    const westKensington = stationByName("West Kensington");
+
+    expect(westKensington).toMatchObject({
+      x: 8,
+      y: 14,
+      labelOffset: { x: 0, y: 72 },
+      lines: ["district"],
+    });
+    expect(findConnectionPath("district", "barons-court", "west-kensington")).toEqual([
+      { x: 4, y: 14 }, { x: 5, y: 14 }, { x: 6, y: 14 },
+      { x: 7, y: 14 }, { x: 8, y: 14 },
+    ]);
+    expect(findConnectionPath("district", "earl-s-court", "west-kensington")).toEqual([
+      { x: 14, y: 14 }, { x: 13, y: 14 }, { x: 12, y: 14 }, { x: 11, y: 14 },
+      { x: 10, y: 14 }, { x: 9, y: 14 }, { x: 8, y: 14 },
+    ]);
   });
 
   it("labels the separate Hammersmith stations by their actual services", () => {

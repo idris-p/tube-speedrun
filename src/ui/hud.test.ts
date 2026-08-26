@@ -3,6 +3,7 @@ import { networkData } from "../data/network";
 import {
   createMapSearchEntries,
   filterMapSearchEntries,
+  findAlphabetJumpIndex,
   findMapSearchStationId,
   getPreviousMenuMode,
 } from "./hud";
@@ -37,5 +38,19 @@ describe("map station search", () => {
     expect(filterMapSearchEntries(entries, "Oxford").map((entry) => entry.stationId)).toEqual([
       "oxford-circus",
     ]);
+  });
+
+  it("finds alphabet jump targets and rejects letters with no stations", () => {
+    const alphabetEntries = [
+      { label: "Acton Town", stationId: "acton-town" },
+      { label: "Baker Street", stationId: "baker-street" },
+      { label: "Ealing Broadway", stationId: "ealing-broadway" },
+      { label: "Westminster", stationId: "westminster" },
+    ];
+
+    expect(findAlphabetJumpIndex(alphabetEntries, "B")).toBe(1);
+    expect(findAlphabetJumpIndex(alphabetEntries, "C")).toBe(-1);
+    expect(findAlphabetJumpIndex(alphabetEntries, "W")).toBe(3);
+    expect(findAlphabetJumpIndex(alphabetEntries, "?")).toBe(-1);
   });
 });

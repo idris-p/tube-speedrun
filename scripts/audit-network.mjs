@@ -1,4 +1,12 @@
-import { connectionSeeds, stationSeeds } from "../src/data/network.generated.ts";
+const runtimeAudit = process.argv.includes("--runtime");
+const { connectionSeeds, stationSeeds } = runtimeAudit
+  ? await importRuntimeNetwork()
+  : await import("../src/data/network.generated.ts");
+
+async function importRuntimeNetwork() {
+  const { networkData } = await import("../src/data/network.ts");
+  return { connectionSeeds: networkData.connections, stationSeeds: networkData.stations };
+}
 
 const DIRECTIONS = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
 const stationById = new Map(stationSeeds.map((station) => [station.id, station]));
@@ -11,6 +19,7 @@ const complexPlayablePaths = metrics.filter(
 const shortZigZags = metrics.reduce((sum, item) => sum + item.shortZigZags, 0);
 const excessivePaths = metrics.filter((item) => item.line !== "waterloo-city" && item.excess > 2);
 
+console.log(`Dataset: ${runtimeAudit ? "runtime" : "generated"}`);
 console.log(`Connections: ${connectionSeeds.length}`);
 console.log(`Total direction changes: ${totalTurns}`);
 console.log(`Playable paths with more than one direction change: ${complexPlayablePaths.length}`);
@@ -30,12 +39,13 @@ for (const item of branchMismatches.slice(0, 30)) {
   console.log(`${item.station} ${item.line} -> ${item.target}: exit=${item.exit} overall=${item.overall} mismatch=${item.mismatch}`);
 }
 
-if (
-  metrics.some((item) => item.humps > 0) ||
-  shortZigZags > 0 ||
-  excessivePaths.length > 0 ||
-  branchMismatches.length > 0
-) {
+const failed = runtimeAudit
+  ? metrics.some((item) => item.humps > 0) || branchMismatches.length > 0
+  : metrics.some((item) => item.humps > 0) ||
+    shortZigZags > 0 ||
+    excessivePaths.length > 0 ||
+    branchMismatches.length > 0;
+if (failed) {
   process.exitCode = 1;
 }
 

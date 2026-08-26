@@ -1,4 +1,5 @@
 import { LINE_BY_ID } from "../data/lines";
+import { getNetworkIndex } from "../data/networkIndex";
 import type { Connection, NetworkData, Point } from "../data/types";
 import { gridPointToSvgPoint } from "./grid";
 import { LINE_STROKE_WIDTH } from "./lineStyles";
@@ -8,8 +9,8 @@ import { createRoundedPathData, simplifyPolylinePoints } from "./roundedPath";
 const SVG_NS = "http://www.w3.org/2000/svg";
 const LINE_CORNER_RADIUS = 20;
 const LOOP_ARROW_ARM_LENGTH = 10;
-export const LINE_REVEAL_ANIMATION_SPEED = 1 / 160;
 const WALK_LINE_DASH_PATTERN = [12, 10] as const;
+const pathLengthByData = new Map<string, number>();
 
 export type LineRevealRenderOptions = {
   fromStationId: string;
@@ -24,8 +25,9 @@ export function renderRevealedLine(
   connectionPoints?: Point[],
   reveal?: LineRevealRenderOptions | null,
 ): void {
-  const hasFromStation = network.stations.some((station) => station.id === connection.from);
-  const hasToStation = network.stations.some((station) => station.id === connection.to);
+  const stations = getNetworkIndex(network).stationById;
+  const hasFromStation = stations.has(connection.from);
+  const hasToStation = stations.has(connection.to);
 
   if (!hasFromStation || !hasToStation) {
     return;
@@ -74,7 +76,12 @@ export function renderRevealedLine(
 
 function applyLineRevealProgress(path: SVGPathElement, progress: number, preserveWalkDashes: boolean): void {
   const clampedProgress = Math.max(0, Math.min(1, progress));
-  const length = path.getTotalLength();
+  const pathData = path.getAttribute("d") ?? "";
+  let length = pathLengthByData.get(pathData);
+  if (length === undefined) {
+    length = path.getTotalLength();
+    pathLengthByData.set(pathData, length);
+  }
   if (preserveWalkDashes) {
     path.style.strokeDasharray = getWalkRevealDashArray(length, clampedProgress);
     path.style.strokeDashoffset = "0";
@@ -137,7 +144,7 @@ function getCanonicalEndpointStationIds(
 }
 
 function getRawEndpointStationIds(connection: Connection, network: NetworkData): [string, string] {
-  const fromStation = network.stations.find((station) => station.id === connection.from);
+  const fromStation = getNetworkIndex(network).stationById.get(connection.from);
   if (!fromStation) return [connection.from, connection.to];
   return pointsMatch(gridPointToSvgPoint(connection.path[0]), gridPointToSvgPoint(fromStation))
     ? [connection.from, connection.to]

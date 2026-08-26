@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { networkData } from "../src/data/network.ts";
+import { LINE_BY_ID } from "../src/data/lines.ts";
 import { riverThamesPath } from "../src/data/mapDecorations.generated.ts";
 import { CorridorLayout } from "../src/rendering/corridorLayout.ts";
 import { GRID_CELL_SIZE, gridPointToSvgPoint } from "../src/rendering/grid.ts";
@@ -13,22 +14,6 @@ import {
   PARALLEL_LINE_SPACING,
 } from "../src/rendering/pathOffset.ts";
 import { createRoundedPathData } from "../src/rendering/roundedPath.ts";
-
-const COLORS = {
-  bakerloo: "#B36305",
-  central: "#E32017",
-  circle: "#FFD300",
-  district: "#00782A",
-  "hammersmith-city": "#F3A9BB",
-  jubilee: "#A0A5A9",
-  metropolitan: "#9B0056",
-  northern: "#000000",
-  piccadilly: "#003688",
-  victoria: "#0098D4",
-  "waterloo-city": "#95CDBA",
-  elizabeth: "#6950A1",
-  walk: "#111111",
-};
 
 const layout = new CorridorLayout(networkData);
 const visibleConnectionPaths = networkData.connections.map((connection) => ({
@@ -71,7 +56,7 @@ const lines = renderedConnections.map(({ connection, points }) => {
     const [x, y] = project(point).split(",").map(Number);
     return { x, y };
   });
-  return `<path d="${createRoundedPathData(path, LINE_CORNER_RADIUS)}" fill="none" stroke="${COLORS[connection.line]}" stroke-width="4" stroke-linecap="butt" stroke-linejoin="round"${dash}/>`;
+  return `<path d="${createRoundedPathData(path, LINE_CORNER_RADIUS)}" fill="none" stroke="${LINE_BY_ID[connection.line].color}" stroke-width="4" stroke-linecap="butt" stroke-linejoin="round"${dash}/>`;
 });
 const riverProjectedPoints = riverPoints.map(project).join(" ");
 const river = [

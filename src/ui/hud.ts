@@ -14,7 +14,15 @@ import {
   createInterchangeMarker,
 } from "../rendering/stationRenderer";
 import { createHudMetric, renderTimeValue } from "./hudMetric";
+import { createMapSearchEntries, StationSearch } from "./stationSearch";
 import { createTriangleIcon } from "./triangleIcon";
+
+export {
+  createMapSearchEntries,
+  filterMapSearchEntries,
+  findAlphabetJumpIndex,
+  findMapSearchStationId,
+} from "./stationSearch";
 
 export type HudCallbacks = {
   onStartRandomSeed: () => void;
@@ -31,12 +39,10 @@ export type HudCallbacks = {
   onFocusGameplayMapStation: (stationId: string) => void;
   onGameplayMapZoomIn: () => void;
   onGameplayMapZoomOut: () => void;
-  onCycleLine: (direction: -1 | 1) => void;
 };
 
 export type MenuMode = "home" | "seed-choice" | "seed-entry";
 type SocialLinkId = "github" | "reddit" | "x";
-type MapSearchEntry = { label: string; stationId: string };
 
 const SOCIAL_LINKS: { id: SocialLinkId; label: string; href: string }[] = [
   { id: "github", label: "GitHub", href: "https://github.com/idris-p" },
@@ -64,7 +70,6 @@ export class Hud {
   private readonly stationValue: HTMLSpanElement;
   private readonly destinationValue: HTMLSpanElement;
   private readonly lineIndicator: HTMLDivElement;
-  private readonly lineCycleControls: HTMLDivElement;
   private zoomControls: HTMLDivElement | null = null;
   private readonly overlayButton: HTMLButtonElement;
   private readonly completionOverlay: HTMLDivElement;
@@ -85,14 +90,14 @@ export class Hud {
   private readonly gameplayMapButton: HTMLButtonElement;
   private readonly tutorialInstructions: HTMLDivElement;
   private readonly gameplayMapOverlay: HTMLDivElement;
-  private readonly gameplayMapSearchInput: HTMLInputElement;
-  private readonly gameplayMapSearchResults: HTMLDivElement;
+  private readonly gameplayMapSearch: StationSearch;
   private readonly exitConfirmOverlay: HTMLDivElement;
   private readonly resultsOverlay: HTMLDivElement;
   private readonly resultsSeedLabel: HTMLSpanElement;
   private readonly resultsSeedText: HTMLSpanElement;
   private readonly resultsSeedCopyButton: HTMLButtonElement;
   private readonly resultsSeedMessage: HTMLParagraphElement;
+  private readonly resultsSeed: HTMLDivElement;
   private readonly resultsTableBody: HTMLTableSectionElement;
   private readonly resultsTotalTime: HTMLSpanElement;
   private readonly resultsTotalChanges: HTMLSpanElement;
@@ -107,13 +112,7 @@ export class Hud {
   private readonly menuActions: HTMLDivElement;
   private readonly menuSeedInput: HTMLInputElement;
   private readonly mapViewerControls: HTMLDivElement;
-  private readonly mapSearchInput: HTMLInputElement;
-  private readonly mapSearchResults: HTMLDivElement;
-  private readonly mapSearchEntries: MapSearchEntry[];
-  private mapSearchVisibleEntries: MapSearchEntry[] = [];
-  private mapSearchActiveIndex = -1;
-  private gameplayMapSearchVisibleEntries: MapSearchEntry[] = [];
-  private gameplayMapSearchActiveIndex = -1;
+  private readonly mapSearch: StationSearch;
   private readonly network: NetworkData;
   private readonly callbacks: HudCallbacks;
   private menuMode: MenuMode = "home";
@@ -122,6 +121,7 @@ export class Hud {
   private renderedTutorialInstructions = "";
   private completionDismissed = false;
   private renderedCompletionJourneyLegs: GameState["journeyLegs"] | null = null;
+  private renderedLineIndicatorKey = "";
 
   constructor(root: HTMLElement, network: NetworkData, callbacks: HudCallbacks) {
     this.network = network;
@@ -155,8 +155,6 @@ export class Hud {
 
     this.lineIndicator = document.createElement("div");
     this.lineIndicator.className = "line-indicator";
-    this.lineCycleControls = document.createElement("div");
-    this.lineCycleControls.className = "line-cycle-controls";
 
     this.mapHost = document.createElement("div");
     this.mapHost.className = "map-host";
@@ -183,6 +181,9 @@ export class Hud {
     this.menuActions = document.createElement("div");
     this.menuActions.className = "main-menu-actions";
     const socialLinks = createSocialLinks();
+    const versionLabel = document.createElement("span");
+    versionLabel.className = "main-menu-version";
+    versionLabel.textContent = "v0.1.0";
 
     this.menuSeedInput = document.createElement("input");
     this.menuSeedInput.type = "text";
@@ -194,7 +195,7 @@ export class Hud {
     this.menuSeedInput.ariaLabel = "Seed";
 
     this.menuContent.append(this.menuTitle, this.menuActions);
-    this.menuOverlay.append(this.menuBackButton, this.menuContent, socialLinks);
+    this.menuOverlay.append(this.menuBackButton, this.menuContent, versionLabel, socialLinks);
     this.setMenuMode("home");
 
     this.mapViewerControls = document.createElement("div");
@@ -205,84 +206,16 @@ export class Hud {
     mapViewerBack.className = "map-viewer-back";
     mapViewerBack.append(createTriangleIcon("previous"), "Menu");
     mapViewerBack.addEventListener("click", callbacks.onReturnToMenu);
-    const mapSearchForm = document.createElement("form");
-    mapSearchForm.className = "map-search-form";
-    this.mapSearchInput = document.createElement("input");
-    this.mapSearchInput.type = "search";
-    this.mapSearchInput.placeholder = "Search for a station";
-    this.mapSearchInput.ariaLabel = "Search for a station";
-    this.mapSearchInput.autocomplete = "off";
-    this.mapSearchInput.spellcheck = false;
-    this.mapSearchInput.setAttribute("role", "combobox");
-    this.mapSearchInput.setAttribute("aria-autocomplete", "list");
-    this.mapSearchInput.setAttribute("aria-controls", "map-station-results");
-    this.mapSearchInput.setAttribute("aria-expanded", "false");
-    this.mapSearchEntries = createMapSearchEntries(network);
-    this.mapSearchResults = document.createElement("div");
-    this.mapSearchResults.id = "map-station-results";
-    this.mapSearchResults.className = "map-search-results";
-    this.mapSearchResults.setAttribute("role", "listbox");
-    this.mapSearchResults.hidden = true;
-    const mapSearchButton = document.createElement("button");
-    mapSearchButton.type = "submit";
-    mapSearchButton.className = "map-search-submit";
-    mapSearchButton.textContent = "Find";
-    mapSearchForm.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const stationId = findMapSearchStationId(this.mapSearchEntries, this.mapSearchInput.value);
-      if (!stationId) {
-        this.mapSearchInput.setCustomValidity("Choose a station from the list.");
-        this.mapSearchInput.reportValidity();
-        return;
-      }
-      this.mapSearchInput.setCustomValidity("");
-      callbacks.onFocusMapStation(stationId);
-      this.hideMapSearchResults();
-      this.mapSearchInput.blur();
+    const mapSearchEntries = createMapSearchEntries(network);
+    this.mapSearch = new StationSearch({
+      formClassName: "map-search-form",
+      resultsId: "map-station-results",
+      optionIdPrefix: "map-station-result",
+      entries: mapSearchEntries,
+      onSelect: callbacks.onFocusMapStation,
     });
-    this.mapSearchInput.addEventListener("focus", () => this.renderMapSearchResults());
-    this.mapSearchInput.addEventListener("input", () => {
-      this.mapSearchInput.setCustomValidity("");
-      this.renderMapSearchResults();
-    });
-    this.mapSearchInput.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        this.hideMapSearchResults();
-        return;
-      }
-      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-        event.preventDefault();
-        if (this.mapSearchResults.hidden) {
-          this.renderMapSearchResults();
-        }
-        if (this.mapSearchVisibleEntries.length === 0) {
-          return;
-        }
-        const direction = event.key === "ArrowDown" ? 1 : -1;
-        const nextIndex = this.mapSearchActiveIndex < 0
-          ? direction > 0 ? 0 : this.mapSearchVisibleEntries.length - 1
-          : (this.mapSearchActiveIndex + direction + this.mapSearchVisibleEntries.length) %
-            this.mapSearchVisibleEntries.length;
-        this.setMapSearchActiveIndex(nextIndex);
-        return;
-      }
-      if (event.key === "Enter" && !this.mapSearchResults.hidden && this.mapSearchActiveIndex >= 0) {
-        event.preventDefault();
-        const entry = this.mapSearchVisibleEntries[this.mapSearchActiveIndex];
-        if (entry) {
-          this.selectMapSearchEntry(entry);
-        }
-      }
-    });
-    mapSearchForm.addEventListener("focusout", () => {
-      window.setTimeout(() => {
-        if (!mapSearchForm.contains(document.activeElement)) {
-          this.hideMapSearchResults();
-        }
-      }, 0);
-    });
-    mapSearchForm.append(this.mapSearchInput, mapSearchButton, this.mapSearchResults);
-    this.mapViewerControls.append(mapViewerBack, mapSearchForm);
+    this.mapHost.addEventListener("pointerdown", () => this.mapSearch.hide());
+    this.mapViewerControls.append(mapViewerBack, this.mapSearch.form);
 
     this.countdownOverlay = document.createElement("div");
     this.countdownOverlay.className = "countdown-overlay";
@@ -406,98 +339,16 @@ export class Hud {
       zoomButton("+", "Zoom in", callbacks.onGameplayMapZoomIn),
       zoomButton("-", "Zoom out", callbacks.onGameplayMapZoomOut),
     );
-    const gameplayMapSearchForm = document.createElement("form");
-    gameplayMapSearchForm.className = "map-search-form gameplay-map-search-form";
-    this.gameplayMapSearchInput = document.createElement("input");
-    this.gameplayMapSearchInput.type = "search";
-    this.gameplayMapSearchInput.placeholder = "Search for a station";
-    this.gameplayMapSearchInput.ariaLabel = "Search for a station";
-    this.gameplayMapSearchInput.autocomplete = "off";
-    this.gameplayMapSearchInput.spellcheck = false;
-    this.gameplayMapSearchInput.setAttribute("role", "combobox");
-    this.gameplayMapSearchInput.setAttribute("aria-autocomplete", "list");
-    this.gameplayMapSearchInput.setAttribute("aria-controls", "gameplay-map-station-results");
-    this.gameplayMapSearchInput.setAttribute("aria-expanded", "false");
-    this.gameplayMapSearchResults = document.createElement("div");
-    this.gameplayMapSearchResults.id = "gameplay-map-station-results";
-    this.gameplayMapSearchResults.className = "map-search-results";
-    this.gameplayMapSearchResults.setAttribute("role", "listbox");
-    this.gameplayMapSearchResults.hidden = true;
-    const gameplayMapSearchButton = document.createElement("button");
-    gameplayMapSearchButton.type = "submit";
-    gameplayMapSearchButton.className = "map-search-submit";
-    gameplayMapSearchButton.textContent = "Find";
-    gameplayMapSearchForm.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const stationId = findMapSearchStationId(
-        this.mapSearchEntries,
-        this.gameplayMapSearchInput.value,
-      );
-      if (!stationId) {
-        this.gameplayMapSearchInput.setCustomValidity("Choose a station from the list.");
-        this.gameplayMapSearchInput.reportValidity();
-        return;
-      }
-      this.gameplayMapSearchInput.setCustomValidity("");
-      callbacks.onFocusGameplayMapStation(stationId);
-      this.hideGameplayMapSearchResults();
-      this.gameplayMapSearchInput.blur();
+    this.gameplayMapSearch = new StationSearch({
+      formClassName: "map-search-form gameplay-map-search-form",
+      resultsId: "gameplay-map-station-results",
+      optionIdPrefix: "gameplay-map-station-result",
+      entries: mapSearchEntries,
+      onSelect: callbacks.onFocusGameplayMapStation,
+      stopEscapePropagation: true,
     });
-    this.gameplayMapSearchInput.addEventListener("focus", () => {
-      this.renderGameplayMapSearchResults();
-    });
-    this.gameplayMapSearchInput.addEventListener("input", () => {
-      this.gameplayMapSearchInput.setCustomValidity("");
-      this.renderGameplayMapSearchResults();
-    });
-    this.gameplayMapSearchInput.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        this.hideGameplayMapSearchResults();
-        return;
-      }
-      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-        event.preventDefault();
-        if (this.gameplayMapSearchResults.hidden) {
-          this.renderGameplayMapSearchResults();
-        }
-        if (this.gameplayMapSearchVisibleEntries.length === 0) {
-          return;
-        }
-        const direction = event.key === "ArrowDown" ? 1 : -1;
-        const nextIndex = this.gameplayMapSearchActiveIndex < 0
-          ? direction > 0 ? 0 : this.gameplayMapSearchVisibleEntries.length - 1
-          : (this.gameplayMapSearchActiveIndex + direction +
-            this.gameplayMapSearchVisibleEntries.length) %
-            this.gameplayMapSearchVisibleEntries.length;
-        this.setGameplayMapSearchActiveIndex(nextIndex);
-        return;
-      }
-      if (
-        event.key === "Enter" &&
-        !this.gameplayMapSearchResults.hidden &&
-        this.gameplayMapSearchActiveIndex >= 0
-      ) {
-        event.preventDefault();
-        const entry = this.gameplayMapSearchVisibleEntries[this.gameplayMapSearchActiveIndex];
-        if (entry) {
-          this.selectGameplayMapSearchEntry(entry);
-        }
-      }
-    });
-    gameplayMapSearchForm.addEventListener("focusout", () => {
-      window.setTimeout(() => {
-        if (!gameplayMapSearchForm.contains(document.activeElement)) {
-          this.hideGameplayMapSearchResults();
-        }
-      }, 0);
-    });
-    gameplayMapSearchForm.append(
-      this.gameplayMapSearchInput,
-      gameplayMapSearchButton,
-      this.gameplayMapSearchResults,
-    );
-    gameplayMapDialog.append(this.gameplayMapHost, gameplayMapSearchForm, gameplayMapZoom);
+    this.gameplayMapHost.addEventListener("pointerdown", () => this.gameplayMapSearch.hide());
+    gameplayMapDialog.append(this.gameplayMapHost, this.gameplayMapSearch.form, gameplayMapZoom);
     this.gameplayMapOverlay.append(gameplayMapBack, gameplayMapDialog);
     window.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && this.gameplayMapOpen) {
@@ -569,6 +420,7 @@ export class Hud {
     resultsTitle.textContent = "Results";
     const resultsSeed = document.createElement("div");
     resultsSeed.className = "results-seed";
+    this.resultsSeed = resultsSeed;
     this.resultsSeedLabel = document.createElement("span");
     this.resultsSeedLabel.className = "results-seed-label";
     this.resultsSeedText = document.createElement("span");
@@ -628,7 +480,6 @@ export class Hud {
       this.statsPanel,
       this.timerPanel,
       this.lineIndicator,
-      this.lineCycleControls,
       this.temporaryBanner,
       this.menuOverlay,
       this.mapViewerControls,
@@ -648,8 +499,7 @@ export class Hud {
     this.resetGameplayMap();
     this.shell.classList.remove("map-viewer-active");
     this.mapViewerControls.hidden = true;
-    this.mapSearchInput.value = "";
-    this.hideMapSearchResults();
+    this.mapSearch.reset();
     this.removeZoomControls();
     this.completionDismissed = false;
     this.exitConfirmOverlay.hidden = true;
@@ -693,6 +543,7 @@ export class Hud {
     this.resultsSeedText.textContent = results.seed;
     this.resultsSeedCopyButton.hidden = results.seedSource === "set";
     this.resultsSeedMessage.hidden = results.seedSource !== "random";
+    this.resultsSeed.classList.toggle("results-seed-message-hidden", this.resultsSeedMessage.hidden);
     const orderedStats = [...results.roundStats].sort((left, right) => left.roundNumber - right.roundNumber);
     this.resultsTableBody.replaceChildren(
       ...orderedStats.map((stats) => {
@@ -806,16 +657,14 @@ export class Hud {
 
     const startStation = getStation(this.network, state.startStationId);
     const destination = getStation(this.network, state.destinationStationId);
-    const elapsed = getElapsedMilliseconds(state, now);
-
-    renderMilliseconds(this.timerValue, elapsed);
-    this.roundValue.textContent = this.tutorialActive
+    const elapsed = this.updateTimer(state, now);
+    setText(this.roundValue, this.tutorialActive
       ? "Tutorial"
-      : runState ? String(runState.currentRoundIndex + 1) : "-";
-    this.moveValue.textContent = String(state.moveCount);
-    this.changeValue.textContent = String(state.changeCount);
-    this.stationValue.textContent = startStation.name;
-    this.destinationValue.textContent = destination.name;
+      : runState ? String(runState.currentRoundIndex + 1) : "-");
+    setText(this.moveValue, String(state.moveCount));
+    setText(this.changeValue, String(state.changeCount));
+    setText(this.stationValue, startStation.name);
+    setText(this.destinationValue, destination.name);
 
     this.renderLineIndicator(state);
 
@@ -857,6 +706,12 @@ export class Hud {
       this.overlayButton.textContent = "Play Again";
       this.removeZoomControls();
     }
+  }
+
+  updateTimer(state: GameState, now: number): number {
+    const elapsed = getElapsedMilliseconds(state, now);
+    renderMilliseconds(this.timerValue, elapsed);
+    return elapsed;
   }
 
   private renderCompletionJourney(state: GameState): void {
@@ -930,59 +785,6 @@ export class Hud {
     this.ensureZoomControls();
   }
 
-  private renderMapSearchResults(): void {
-    this.mapSearchVisibleEntries = filterMapSearchEntries(this.mapSearchEntries, this.mapSearchInput.value);
-    this.mapSearchActiveIndex = -1;
-    this.mapSearchResults.replaceChildren(...this.mapSearchVisibleEntries.map((entry, index) => {
-      const option = document.createElement("button");
-      option.type = "button";
-      option.id = `map-station-result-${entry.stationId}`;
-      option.className = "map-search-result";
-      option.setAttribute("role", "option");
-      option.setAttribute("aria-selected", "false");
-      option.tabIndex = -1;
-      option.textContent = entry.label;
-      option.addEventListener("pointerdown", (event) => event.preventDefault());
-      option.addEventListener("pointerenter", () => this.setMapSearchActiveIndex(index));
-      option.addEventListener("click", () => this.selectMapSearchEntry(entry));
-      return option;
-    }));
-    this.mapSearchResults.hidden = this.mapSearchVisibleEntries.length === 0;
-    this.mapSearchInput.setAttribute("aria-expanded", String(!this.mapSearchResults.hidden));
-  }
-
-  private setMapSearchActiveIndex(index: number): void {
-    if (this.mapSearchVisibleEntries.length === 0) {
-      return;
-    }
-    this.mapSearchActiveIndex = Math.max(0, Math.min(index, this.mapSearchVisibleEntries.length - 1));
-    const options = [...this.mapSearchResults.querySelectorAll<HTMLButtonElement>(".map-search-result")];
-    options.forEach((option, optionIndex) => {
-      const active = optionIndex === this.mapSearchActiveIndex;
-      option.classList.toggle("map-search-result-active", active);
-      option.setAttribute("aria-selected", String(active));
-      if (active) {
-        this.mapSearchInput.setAttribute("aria-activedescendant", option.id);
-        option.scrollIntoView({ block: "nearest" });
-      }
-    });
-  }
-
-  private selectMapSearchEntry(entry: MapSearchEntry): void {
-    this.mapSearchInput.value = entry.label;
-    this.mapSearchInput.setCustomValidity("");
-    this.callbacks.onFocusMapStation(entry.stationId);
-    this.hideMapSearchResults();
-    this.mapSearchInput.blur();
-  }
-
-  private hideMapSearchResults(): void {
-    this.mapSearchResults.hidden = true;
-    this.mapSearchActiveIndex = -1;
-    this.mapSearchInput.setAttribute("aria-expanded", "false");
-    this.mapSearchInput.removeAttribute("aria-activedescendant");
-  }
-
   private setMenuMode(mode: MenuMode): void {
     this.menuMode = mode;
     this.menuOverlay.dataset.menuMode = mode;
@@ -1043,8 +845,7 @@ export class Hud {
     this.gameplayMapOverlay.hidden = false;
     this.gameplayExitButton.hidden = true;
     this.gameplayMapButton.hidden = true;
-    this.gameplayMapSearchInput.value = "";
-    this.hideGameplayMapSearchResults();
+    this.gameplayMapSearch.reset();
     this.callbacks.onOpenGameplayMap();
   }
 
@@ -1061,77 +862,7 @@ export class Hud {
     this.shell.classList.remove("gameplay-map-active");
     this.gameplayMapOverlay.hidden = true;
     this.gameplayMapButton.hidden = true;
-    this.gameplayMapSearchInput.value = "";
-    this.hideGameplayMapSearchResults();
-  }
-
-  private renderGameplayMapSearchResults(): void {
-    this.gameplayMapSearchVisibleEntries = filterMapSearchEntries(
-      this.mapSearchEntries,
-      this.gameplayMapSearchInput.value,
-    );
-    this.gameplayMapSearchActiveIndex = -1;
-    this.gameplayMapSearchResults.replaceChildren(
-      ...this.gameplayMapSearchVisibleEntries.map((entry, index) => {
-        const option = document.createElement("button");
-        option.type = "button";
-        option.id = `gameplay-map-station-result-${entry.stationId}`;
-        option.className = "map-search-result";
-        option.setAttribute("role", "option");
-        option.setAttribute("aria-selected", "false");
-        option.tabIndex = -1;
-        option.textContent = entry.label;
-        option.addEventListener("pointerdown", (event) => event.preventDefault());
-        option.addEventListener("pointerenter", () => {
-          this.setGameplayMapSearchActiveIndex(index);
-        });
-        option.addEventListener("click", () => this.selectGameplayMapSearchEntry(entry));
-        return option;
-      }),
-    );
-    this.gameplayMapSearchResults.hidden =
-      this.gameplayMapSearchVisibleEntries.length === 0;
-    this.gameplayMapSearchInput.setAttribute(
-      "aria-expanded",
-      String(!this.gameplayMapSearchResults.hidden),
-    );
-  }
-
-  private setGameplayMapSearchActiveIndex(index: number): void {
-    if (this.gameplayMapSearchVisibleEntries.length === 0) {
-      return;
-    }
-    this.gameplayMapSearchActiveIndex = Math.max(
-      0,
-      Math.min(index, this.gameplayMapSearchVisibleEntries.length - 1),
-    );
-    const options = [
-      ...this.gameplayMapSearchResults.querySelectorAll<HTMLButtonElement>(".map-search-result"),
-    ];
-    options.forEach((option, optionIndex) => {
-      const active = optionIndex === this.gameplayMapSearchActiveIndex;
-      option.classList.toggle("map-search-result-active", active);
-      option.setAttribute("aria-selected", String(active));
-      if (active) {
-        this.gameplayMapSearchInput.setAttribute("aria-activedescendant", option.id);
-        option.scrollIntoView({ block: "nearest" });
-      }
-    });
-  }
-
-  private selectGameplayMapSearchEntry(entry: MapSearchEntry): void {
-    this.gameplayMapSearchInput.value = entry.label;
-    this.gameplayMapSearchInput.setCustomValidity("");
-    this.callbacks.onFocusGameplayMapStation(entry.stationId);
-    this.hideGameplayMapSearchResults();
-    this.gameplayMapSearchInput.blur();
-  }
-
-  private hideGameplayMapSearchResults(): void {
-    this.gameplayMapSearchResults.hidden = true;
-    this.gameplayMapSearchActiveIndex = -1;
-    this.gameplayMapSearchInput.setAttribute("aria-expanded", "false");
-    this.gameplayMapSearchInput.removeAttribute("aria-activedescendant");
+    this.gameplayMapSearch.reset();
   }
 
   private resetTutorialUi(): void {
@@ -1144,8 +875,14 @@ export class Hud {
 
   private renderLineIndicator(state: GameState): void {
     const preview = getLineCyclePreview(state, this.network);
+    const renderKey = preview
+      ? `${state.currentStationId}|${preview.previous}|${preview.current}|${preview.next}|${preview.lineCount}`
+      : `${state.currentStationId}|ready`;
+    if (renderKey === this.renderedLineIndicatorKey) {
+      return;
+    }
+    this.renderedLineIndicatorKey = renderKey;
     this.lineIndicator.replaceChildren();
-    this.lineCycleControls.replaceChildren();
     this.lineIndicator.style.removeProperty("--line-color");
     this.lineIndicator.style.removeProperty("--line-text-color");
 
@@ -1159,10 +896,6 @@ export class Hud {
       lineChip("A", preview.previous, canSwitch ? "preview" : "disabled"),
       lineChip("Now", preview.current, "current"),
       lineChip("D", preview.next, canSwitch ? "preview" : "disabled"),
-    );
-    this.lineCycleControls.append(
-      lineCycleButton(-1, !canSwitch, this.callbacks.onCycleLine),
-      lineCycleButton(1, !canSwitch, this.callbacks.onCycleLine),
     );
   }
 
@@ -1199,68 +932,6 @@ function menuButton(
     button.addEventListener("click", callback);
   }
   return button;
-}
-
-export function createMapSearchEntries(network: NetworkData): MapSearchEntry[] {
-  const nameCounts = new Map<string, number>();
-  for (const station of network.stations) {
-    const key = normalizeStationSearch(station.name);
-    nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
-  }
-
-  return network.stations
-    .map((station) => {
-      const duplicateName = (nameCounts.get(normalizeStationSearch(station.name)) ?? 0) > 1;
-      const lineNames = station.lines
-        .filter((lineId) => lineId !== "walk")
-        .map((lineId) => LINE_BY_ID[lineId].name)
-        .join(", ");
-      return {
-        label: duplicateName && lineNames !== "" ? `${station.name} \u2014 ${lineNames}` : station.name,
-        stationId: station.id,
-      };
-    })
-    .sort((left, right) => left.label.localeCompare(right.label, "en-GB"));
-}
-
-export function findMapSearchStationId(entries: readonly MapSearchEntry[], query: string): string | null {
-  const normalizedQuery = normalizeStationSearch(query);
-  if (normalizedQuery === "") {
-    return null;
-  }
-
-  const exactMatches = entries.filter((entry) => normalizeStationSearch(entry.label) === normalizedQuery);
-  if (exactMatches.length === 1) {
-    return exactMatches[0].stationId;
-  }
-
-  const nameMatches = entries.filter((entry) =>
-    normalizeStationSearch(entry.label.split("\u2014", 1)[0]) === normalizedQuery
-  );
-  if (nameMatches.length === 1) {
-    return nameMatches[0].stationId;
-  }
-
-  const partialMatches = entries.filter((entry) => normalizeStationSearch(entry.label).includes(normalizedQuery));
-  return partialMatches.length === 1 ? partialMatches[0].stationId : null;
-}
-
-export function filterMapSearchEntries(
-  entries: readonly MapSearchEntry[],
-  query: string,
-): MapSearchEntry[] {
-  const normalizedQuery = normalizeStationSearch(query);
-  if (normalizedQuery === "") {
-    return [...entries];
-  }
-  return entries.filter((entry) => normalizeStationSearch(entry.label).includes(normalizedQuery));
-}
-
-function normalizeStationSearch(value: string): string {
-  return value
-    .trim()
-    .toLocaleLowerCase("en-GB")
-    .replace(/\s+/g, " ");
 }
 
 export function getPreviousMenuMode(mode: MenuMode): MenuMode {
@@ -1431,24 +1102,6 @@ function createTutorialInstructionLine(instruction: string): HTMLSpanElement {
   return line;
 }
 
-function lineCycleButton(
-  direction: -1 | 1,
-  disabled: boolean,
-  callback: (direction: -1 | 1) => void,
-): HTMLButtonElement {
-  const isPrevious = direction === -1;
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "line-cycle-button";
-  button.disabled = disabled;
-  button.ariaLabel = isPrevious ? "Select previous line (A)" : "Select next line (D)";
-  button.title = button.ariaLabel;
-
-  button.append(createTriangleIcon(isPrevious ? "previous" : "next"));
-  button.addEventListener("click", () => callback(direction));
-  return button;
-}
-
 function completionStat(label: string, valueElement: HTMLSpanElement): HTMLDivElement {
   const wrapper = document.createElement("div");
   wrapper.className = "completion-stat";
@@ -1546,4 +1199,10 @@ function getTimeParts(milliseconds: number): { minutes: string; seconds: string;
     seconds: seconds.toString().padStart(2, "0"),
     centiseconds: centiseconds.toString().padStart(2, "0"),
   };
+}
+
+function setText(element: HTMLElement, value: string): void {
+  if (element.textContent !== value) {
+    element.textContent = value;
+  }
 }

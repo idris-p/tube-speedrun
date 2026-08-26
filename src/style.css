@@ -154,11 +154,6 @@ svg text {
 .direction-stub-control:focus-visible,
 .direction-stub-selected {
   cursor: pointer;
-}
-
-.direction-stub-hovered,
-.direction-stub-control:focus-visible,
-.direction-stub-selected {
   transform: scale(1.14);
 }
 
@@ -212,7 +207,6 @@ svg text {
 
 .hud-panel,
 .line-indicator,
-.seed-controls,
 .zoom-controls,
 .temporary-banner {
   position: absolute;
@@ -427,19 +421,6 @@ svg text {
   white-space: nowrap;
 }
 
-.seed-controls {
-  left: 18px;
-  bottom: 18px;
-  display: flex;
-  gap: 8px;
-  width: min(470px, calc(100vw - 142px));
-  padding: 10px;
-}
-
-.seed-controls[hidden] {
-  display: none;
-}
-
 .zoom-controls {
   right: 18px;
   bottom: 105px;
@@ -468,33 +449,6 @@ svg text {
 .zoom-controls button:active {
   transform: translateY(2px);
   box-shadow: none;
-}
-
-.seed-controls input {
-  min-width: 0;
-  flex: 1;
-  height: 40px;
-  border: 2px solid #111111;
-  border-radius: 6px;
-  padding: 0 10px;
-  background: #ffffff;
-  color: #111111;
-  font-weight: 400;
-}
-
-.seed-controls button {
-  height: 40px;
-  border: 2px solid #111111;
-  border-radius: 6px;
-  padding: 0 14px;
-  background: #111111;
-  color: #ffffff;
-  font-weight: 850;
-}
-
-.seed-controls button[type="button"] {
-  background: #ffffff;
-  color: #111111;
 }
 
 .temporary-banner {
@@ -775,39 +729,12 @@ svg text {
   box-shadow: 0 4px 0 #111111;
 }
 
-.line-cycle-controls {
-  display: none;
+.gameplay-exit-button {
+  left: var(--gameplay-ui-inset);
 }
 
-.line-cycle-button {
-  display: grid;
-  place-items: center;
-  min-width: 44px;
-  border: 2px solid #111111;
-  border-radius: 6px;
-  padding: 0;
-  background: #ffffff;
-  box-shadow: 0 3px 0 #111111;
-  cursor: pointer;
-}
-
-.line-cycle-button:hover:not(:disabled) {
-  background: #f7f2e5;
-}
-
-.line-cycle-button:active:not(:disabled) {
-  transform: translateY(3px);
-  box-shadow: none;
-}
-
-.line-cycle-button:focus-visible {
-  outline: 3px solid #005eb8;
-  outline-offset: 2px;
-}
-
-.line-cycle-button:disabled {
-  opacity: 0.35;
-  cursor: default;
+.gameplay-map-button {
+  right: var(--gameplay-ui-inset);
 }
 
 .line-cycle-icon {
@@ -823,14 +750,6 @@ svg text {
 
 .line-cycle-icon-next {
   border-left: 12px solid #111111;
-}
-
-.gameplay-exit-button {
-  left: var(--gameplay-ui-inset);
-}
-
-.gameplay-map-button {
-  right: var(--gameplay-ui-inset);
 }
 
 .gameplay-exit-button[hidden],
@@ -1072,7 +991,7 @@ svg text {
   font-weight: 700;
 }
 
-.results-seed:has(+ .results-seed-message[hidden]) {
+.results-seed-message-hidden {
   margin-bottom: 18px;
 }
 
@@ -1244,6 +1163,18 @@ svg text {
   pointer-events: auto;
 }
 
+.main-menu-version {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  color: #111111;
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1;
+  -webkit-text-stroke: 3px #ffffff;
+  paint-order: stroke fill;
+}
+
 .main-menu:not([data-menu-mode="home"]) .main-menu-social-links {
   display: none;
 }
@@ -1410,6 +1341,23 @@ svg text {
   font-weight: 900;
 }
 
+.station-search-browse-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.station-search-browse-only input {
+  caret-color: transparent;
+  cursor: pointer;
+}
+
+.station-search-browse-only input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.station-search-browse-only .map-search-submit {
+  display: none;
+}
+
 .map-search-results {
   position: absolute;
   bottom: calc(100% + 10px);
@@ -1429,6 +1377,57 @@ svg text {
 
 .map-search-results[hidden] {
   display: none;
+}
+
+.station-search-browse-only .map-search-results {
+  right: 78px;
+}
+
+.station-search-alphabet {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  display: grid;
+  grid-template-rows: repeat(13, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-flow: column;
+  gap: 2px;
+  width: 70px;
+  height: min(360px, calc(100vh - 120px));
+  border: 2px solid #111111;
+  border-radius: 8px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+
+.station-search-alphabet[hidden] {
+  display: none;
+}
+
+.station-search-alphabet button {
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  border-radius: 4px;
+  padding: 0;
+  background: transparent;
+  color: #111111;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  touch-action: manipulation;
+}
+
+.station-search-alphabet button:active,
+.station-search-alphabet button:focus-visible {
+  background: #111111;
+  color: #ffffff;
+}
+
+.station-search-alphabet button:disabled {
+  background: transparent;
+  color: #9a9a9a;
 }
 
 .map-search-result {
@@ -1612,6 +1611,11 @@ svg text {
     bottom: 18px;
   }
 
+  .main-menu-version {
+    bottom: 18px;
+    left: 18px;
+  }
+
   .main-menu-social-link {
     width: 42px;
     height: 42px;
@@ -1655,15 +1659,6 @@ svg text {
 
   .temporary-banner {
     display: none;
-  }
-
-  .seed-controls {
-    left: 18px;
-    width: min(470px, calc(100vw - 142px));
-  }
-
-  .seed-controls button {
-    padding: 0 10px;
   }
 
   .metric-value {
@@ -1715,21 +1710,6 @@ svg text {
     height: 22px;
   }
 
-  .seed-controls {
-    width: calc(100vw - 116px);
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .seed-controls input {
-    grid-column: 1 / -1;
-    width: 100%;
-  }
-
-  .seed-controls button {
-    min-width: 0;
-    padding: 0 8px;
-  }
 }
 
 @media (hover: none) and (pointer: coarse) {
@@ -1753,43 +1733,6 @@ svg text {
 
   .line-chip-key {
     min-width: 22px;
-  }
-
-  .line-indicator:not([hidden]) + .line-cycle-controls {
-    position: absolute;
-    z-index: 11;
-    top: var(--gameplay-ui-inset);
-    left: var(--gameplay-ui-inset);
-    right: var(--gameplay-ui-inset);
-    display: flex;
-    justify-content: space-between;
-    height: var(--gameplay-control-size);
-    pointer-events: none;
-  }
-
-  .line-cycle-button {
-    width: var(--gameplay-control-size);
-    min-width: var(--gameplay-control-size);
-    height: var(--gameplay-control-size);
-    border-radius: 8px;
-    pointer-events: auto;
-  }
-
-  .line-cycle-icon {
-    border-top-width: 10px;
-    border-bottom-width: 10px;
-  }
-
-  .line-cycle-icon-previous {
-    border-right-width: 15px;
-  }
-
-  .line-cycle-icon-next {
-    border-left-width: 15px;
-  }
-
-  .tutorial-active .line-cycle-controls {
-    display: none !important;
   }
 
   .tutorial-instructions {
@@ -1838,27 +1781,6 @@ svg text {
     display: none;
   }
 
-  .line-indicator:not([hidden]) + .line-cycle-controls {
-    position: absolute;
-    z-index: 11;
-    top: var(--gameplay-ui-inset);
-    left: 50%;
-    right: auto;
-    display: flex;
-    justify-content: space-between;
-    width: var(--touch-line-control-span);
-    height: var(--gameplay-control-size);
-    transform: translateX(-50%);
-    pointer-events: none;
-  }
-
-  .line-cycle-button {
-    width: var(--gameplay-control-size);
-    min-width: var(--gameplay-control-size);
-    height: var(--gameplay-control-size);
-    pointer-events: auto;
-  }
-
   .gameplay-exit-button,
   .gameplay-map-button {
     width: var(--gameplay-control-size);
@@ -1894,19 +1816,6 @@ svg text {
 
   .line-chip-name {
     font-size: clamp(12px, 1.45vmin, 15px);
-  }
-
-  .line-cycle-icon {
-    border-top-width: clamp(10px, 1.2vmin, 12px);
-    border-bottom-width: clamp(10px, 1.2vmin, 12px);
-  }
-
-  .line-cycle-icon-previous {
-    border-right-width: clamp(15px, 1.7vmin, 18px);
-  }
-
-  .line-cycle-icon-next {
-    border-left-width: clamp(15px, 1.7vmin, 18px);
   }
 
   .gameplay-exit-button .button-icon,
@@ -2045,27 +1954,6 @@ svg text {
     font-size: 11px;
   }
 
-  .line-indicator:not([hidden]) + .line-cycle-controls {
-    height: var(--gameplay-control-size);
-  }
-
-  .line-cycle-button {
-    border-radius: 7px;
-  }
-
-  .line-cycle-icon {
-    border-top-width: 8px;
-    border-bottom-width: 8px;
-  }
-
-  .line-cycle-icon-previous {
-    border-right-width: 12px;
-  }
-
-  .line-cycle-icon-next {
-    border-left-width: 12px;
-  }
-
   .hud-left,
   .hud-timer {
     bottom: var(--gameplay-ui-inset);
@@ -2158,6 +2046,12 @@ svg text {
     gap: 7px;
   }
 
+  .main-menu-version {
+    bottom: 10px;
+    left: 10px;
+    font-size: 14px;
+  }
+
   .main-menu-social-link {
     width: 36px;
     height: 36px;
@@ -2198,7 +2092,7 @@ svg text {
   }
 
   .results-seed-message,
-  .results-seed:has(+ .results-seed-message[hidden]) {
+  .results-seed-message-hidden {
     margin-bottom: 9px;
   }
 
@@ -2264,6 +2158,52 @@ svg text {
   }
 }
 
+/* Shared triangle icons retain the established touch sizing used by map/menu back controls. */
+@media (hover: none) and (pointer: coarse) {
+  .line-cycle-icon {
+    border-top-width: 10px;
+    border-bottom-width: 10px;
+  }
+
+  .line-cycle-icon-previous {
+    border-right-width: 15px;
+  }
+
+  .line-cycle-icon-next {
+    border-left-width: 15px;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) and (orientation: landscape) and (min-height: 501px) and (max-width: 1400px) {
+  .line-cycle-icon {
+    border-top-width: clamp(10px, 1.2vmin, 12px);
+    border-bottom-width: clamp(10px, 1.2vmin, 12px);
+  }
+
+  .line-cycle-icon-previous {
+    border-right-width: clamp(15px, 1.7vmin, 18px);
+  }
+
+  .line-cycle-icon-next {
+    border-left-width: clamp(15px, 1.7vmin, 18px);
+  }
+}
+
+@media (hover: none) and (pointer: coarse) and (orientation: landscape) and (max-height: 500px) and (max-width: 1400px) {
+  .line-cycle-icon {
+    border-top-width: 8px;
+    border-bottom-width: 8px;
+  }
+
+  .line-cycle-icon-previous {
+    border-right-width: 12px;
+  }
+
+  .line-cycle-icon-next {
+    border-left-width: 12px;
+  }
+}
+
 @media (hover: none) and (pointer: coarse) {
   :root {
     --touch-gutter: clamp(12px, 2.2vmin, 22px);
@@ -2286,21 +2226,19 @@ svg text {
   }
 
   body {
+    min-height: 100vh;
     min-height: 100dvh;
     overscroll-behavior: none;
   }
 
   .app-shell {
+    height: 100vh;
     height: 100dvh;
   }
 
   .main-menu h1,
   .countdown-value {
     text-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
-  }
-
-  .line-cycle-controls {
-    display: none !important;
   }
 
   .zoom-controls,
@@ -2359,10 +2297,12 @@ svg text {
   }
 
   .completion-overlay {
+    max-height: calc(100vh - var(--touch-safe-top) - var(--touch-safe-bottom));
     max-height: calc(100dvh - var(--touch-safe-top) - var(--touch-safe-bottom));
   }
 
   .results-overlay {
+    max-height: 100vh;
     max-height: 100dvh;
     padding:
       calc(var(--touch-safe-top) + 52px)
@@ -2401,6 +2341,11 @@ svg text {
   .main-menu-social-links {
     right: var(--touch-safe-right);
     bottom: var(--touch-safe-bottom);
+  }
+
+  .main-menu-version {
+    bottom: var(--touch-safe-bottom);
+    left: var(--touch-safe-left);
   }
 
   .map-search-form {
@@ -2503,6 +2448,7 @@ svg text {
 
   .gameplay-map-dialog {
     width: min(1120px, calc(100vw - var(--touch-safe-left) - var(--touch-safe-right)));
+    height: min(780px, calc(100vh - var(--touch-safe-top) - var(--touch-safe-bottom)));
     height: min(780px, calc(100dvh - var(--touch-safe-top) - var(--touch-safe-bottom)));
   }
 }
@@ -2541,6 +2487,7 @@ svg text {
 
   .main-menu-content {
     top: 50%;
+    gap: clamp(58px, 7vh, 84px);
     gap: clamp(58px, 7dvh, 84px);
     transform: translate(-50%, -50%);
   }
@@ -2608,6 +2555,7 @@ svg text {
 
   .main-menu-content {
     top: 50%;
+    gap: clamp(58px, 7vh, 86px);
     gap: clamp(58px, 7dvh, 86px);
     width: min(680px, calc(100vw - var(--touch-safe-left) - var(--touch-safe-right)));
     transform: translate(-50%, -50%);
@@ -2797,6 +2745,7 @@ svg text {
   .main-menu-content {
     top: 50%;
     left: 50vw;
+    gap: clamp(32px, 6vh, 50px);
     gap: clamp(32px, 6dvh, 50px);
     width: min(310px, calc(100vw - var(--touch-safe-left) - var(--touch-safe-right)));
     transform: translate(-50%, -50%);
@@ -2846,6 +2795,7 @@ svg text {
     flex-direction: column;
     justify-content: center;
     width: 100%;
+    height: 100vh;
     height: 100dvh;
     max-height: none;
     transform: none;
@@ -3177,6 +3127,7 @@ svg text {
     inset: 0;
     display: block;
     width: 100%;
+    height: 100vh;
     height: 100dvh;
     max-width: none;
     max-height: none;

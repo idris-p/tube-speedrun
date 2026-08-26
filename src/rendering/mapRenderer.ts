@@ -116,6 +116,12 @@ export class MapRenderer {
 
   private readonly corridorLayout: CorridorLayout;
 
+  private readonly allConnectionIds: ReadonlySet<string>;
+
+  private readonly fullConnectionPaths: RenderedConnectionPath[];
+
+  private renderedScene: "gameplay" | "menu" | "explorer" | null = null;
+
   private zoom = DEFAULT_GAMEPLAY_ZOOM;
 
   private completedCameraCenter: Point | null = null;
@@ -128,6 +134,12 @@ export class MapRenderer {
     this.network = network;
     this.corridorLayout = new CorridorLayout(network);
     this.mapBounds = getNetworkBounds(network);
+    this.allConnectionIds = new Set(network.connections.map((connection) => connection.id));
+    this.fullConnectionPaths = network.connections.map((connection) => ({
+      connection,
+      points: this.corridorLayout.getConnectionRenderPoints(connection, this.allConnectionIds),
+      cameraPoints: this.corridorLayout.getConnectionCameraPoints(connection),
+    }));
     this.svg = document.createElementNS(SVG_NS, "svg");
     this.svg.setAttribute("class", "tube-map");
     this.svg.setAttribute("role", "img");
@@ -146,6 +158,8 @@ export class MapRenderer {
     directionStubsInteractive = true,
     visibleDirectionStubConnectionIds: ReadonlySet<string> | null = null,
   ): void {
+    const needsGameplayBackground = this.renderedScene !== "gameplay";
+    this.renderedScene = "gameplay";
     const wasMenuPreview = this.svg.classList.contains("tube-map-menu-preview");
     if (this.renderedSeed !== state.seed) {
       this.renderedSeed = state.seed;
@@ -204,10 +218,20 @@ export class MapRenderer {
       "viewBox",
       `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`,
     );
-    this.svg.replaceChildren();
-
-    this.renderGrid(viewBox);
-    renderRiverThames(this.svg, viewBox);
+    if (needsGameplayBackground) {
+      this.svg.replaceChildren();
+      this.renderMapBackground();
+    } else {
+      for (const element of Array.from(this.svg.children)) {
+        if (
+          element.classList.contains("revealed-lines") ||
+          element.classList.contains("direction-stubs") ||
+          element.classList.contains("stations")
+        ) {
+          element.remove();
+        }
+      }
+    }
 
     const revealedLayer = document.createElementNS(SVG_NS, "g");
     revealedLayer.setAttribute("class", "revealed-lines");
@@ -294,35 +318,6 @@ export class MapRenderer {
 
   }
 
-  renderIdle(): void {
-    const wasMenuPreview = this.svg.classList.contains("tube-map-menu-preview");
-    this.svg.classList.remove("tube-map-running");
-    this.svg.classList.remove(
-      "tube-map-completed",
-      "tube-map-panning",
-      "tube-map-menu-preview",
-      "tube-map-explorer",
-      "tube-map-target-arrival",
-    );
-    if (wasMenuPreview) {
-      this.menuPreviewOrbitOffsetMs = 0;
-    }
-    this.completedCameraCenter = null;
-    this.renderedSeed = null;
-    const viewBoxSize = this.getViewBoxSize();
-    const baseViewBoxSize = this.getBaseViewBoxSize();
-    const viewBox = {
-      x: (baseViewBoxSize.width - viewBoxSize.width) / 2,
-      y: (baseViewBoxSize.height - viewBoxSize.height) / 2,
-      width: viewBoxSize.width,
-      height: viewBoxSize.height,
-    };
-    this.svg.setAttribute("viewBox", `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`);
-    this.svg.replaceChildren();
-    this.renderGrid(viewBox);
-    renderRiverThames(this.svg, viewBox);
-  }
-
   renderMenuPreview(now = performance.now()): void {
     const wasMenuPreview = this.svg.classList.contains("tube-map-menu-preview");
     const orbitDurationMs = MENU_PREVIEW_SECONDS_PER_ORBIT * 1_000;
@@ -354,47 +349,9 @@ export class MapRenderer {
       height: viewBoxSize.height,
     };
     this.svg.setAttribute("viewBox", `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`);
-    this.svg.replaceChildren();
-
-    this.renderGrid(viewBox);
-    renderRiverThames(this.svg, viewBox);
-
-    const allConnectionIds = new Set(this.network.connections.map((connection) => connection.id));
-    const visibleConnectionPaths = this.network.connections.map((connection) => ({
-      connection,
-      points: this.corridorLayout.getConnectionRenderPoints(connection, allConnectionIds),
-      cameraPoints: this.corridorLayout.getConnectionCameraPoints(connection),
-    }));
-    const revealedLayer = document.createElementNS(SVG_NS, "g");
-    revealedLayer.setAttribute("class", "revealed-lines");
-    this.svg.append(revealedLayer);
-    for (const group of groupConnectionsByRenderedPath(visibleConnectionPaths)) {
-      group.forEach(({ connection, points }, index) => {
-        renderRevealedLine(
-          revealedLayer,
-          connection,
-          this.network,
-          getCenteredOffset(index, group.length, PARALLEL_LINE_SPACING),
-          points,
-        );
-      });
-    }
-
-    const stationLayer = document.createElementNS(SVG_NS, "g");
-    stationLayer.setAttribute("class", "stations");
-    this.svg.append(stationLayer);
-    for (const station of this.network.stations) {
-      if (station.lines.length === 0) {
-        continue;
-      }
-      renderStationMarker(
-        stationLayer,
-        station,
-        this.network,
-        station.lines[0],
-        false,
-        this.corridorLayout.getStationMarkerGroups(station.id),
-      );
+    if (this.renderedScene !== "menu") {
+      this.renderFullMapScene(false);
+      this.renderedScene = "menu";
     }
 
     this.svg.classList.remove(
@@ -441,20 +398,20 @@ export class MapRenderer {
     this.svg.setAttribute("viewBox", `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`);
     this.svg.classList.remove("tube-map-running", "tube-map-menu-preview", "tube-map-target-arrival");
     this.svg.classList.add("tube-map-completed", "tube-map-explorer");
+    if (this.renderedScene !== "explorer") {
+      this.renderFullMapScene(true);
+      this.renderedScene = "explorer";
+    }
+  }
+
+  private renderFullMapScene(revealLabels: boolean): void {
     this.svg.replaceChildren();
+    this.renderMapBackground();
 
-    this.renderGrid(viewBox);
-    renderRiverThames(this.svg, viewBox);
-
-    const allConnectionIds = new Set(this.network.connections.map((connection) => connection.id));
-    const visibleConnectionPaths = this.network.connections.map((connection) => ({
-      connection,
-      points: this.corridorLayout.getConnectionRenderPoints(connection, allConnectionIds),
-    }));
     const revealedLayer = document.createElementNS(SVG_NS, "g");
     revealedLayer.setAttribute("class", "revealed-lines");
     this.svg.append(revealedLayer);
-    for (const group of groupConnectionsByRenderedPath(visibleConnectionPaths)) {
+    for (const group of groupConnectionsByRenderedPath(this.fullConnectionPaths)) {
       group.forEach(({ connection, points }, index) => {
         renderRevealedLine(
           revealedLayer,
@@ -470,9 +427,7 @@ export class MapRenderer {
     stationLayer.setAttribute("class", "stations");
     this.svg.append(stationLayer);
     for (const station of this.network.stations) {
-      if (station.lines.length === 0) {
-        continue;
-      }
+      if (station.lines.length === 0) continue;
       renderStationMarker(
         stationLayer,
         station,
@@ -481,13 +436,23 @@ export class MapRenderer {
         false,
         this.corridorLayout.getStationMarkerGroups(station.id),
         undefined,
-        {
-          revealedLabel: {
-            placement: getStationLabelPlacement(station),
-          },
-        },
+        revealLabels
+          ? { revealedLabel: { placement: getStationLabelPlacement(station) } }
+          : undefined,
       );
     }
+  }
+
+  private renderMapBackground(): void {
+    const scenePadding = Math.max(BASE_VIEWBOX_WIDTH, BASE_VIEWBOX_HEIGHT) * 3;
+    const sceneViewBox = {
+      x: this.mapBounds.minX - scenePadding,
+      y: this.mapBounds.minY - scenePadding,
+      width: this.mapBounds.maxX - this.mapBounds.minX + scenePadding * 2,
+      height: this.mapBounds.maxY - this.mapBounds.minY + scenePadding * 2,
+    };
+    this.renderGrid(sceneViewBox);
+    renderRiverThames(this.svg, sceneViewBox);
   }
 
   zoomIn(): void {

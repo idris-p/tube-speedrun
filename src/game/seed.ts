@@ -1,4 +1,5 @@
 import type { NetworkData } from "../data/types";
+import { getNetworkIndex } from "../data/networkIndex";
 import { ROUND_COUNT, type RoundConfig } from "./RunState";
 
 export function generateSeed(): string {
@@ -77,18 +78,15 @@ export function getNetworkDistance(network: NetworkData, from: string, to: strin
 
   const visited = new Set<string>([from]);
   const queue: Array<{ stationId: string; distance: number }> = [{ stationId: from, distance: 0 }];
+  const neighboursByStation = getNetworkIndex(network).neighbourIdsByStation;
+  let queueIndex = 0;
 
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (!current) {
-      break;
-    }
+  while (queueIndex < queue.length) {
+    const current = queue[queueIndex];
+    queueIndex += 1;
 
-    for (const connection of network.connections) {
-      const next =
-        connection.from === current.stationId ? connection.to : connection.to === current.stationId ? connection.from : null;
-
-      if (!next || visited.has(next)) {
+    for (const next of neighboursByStation.get(current.stationId) ?? []) {
+      if (visited.has(next)) {
         continue;
       }
 

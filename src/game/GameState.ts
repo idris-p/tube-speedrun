@@ -1,4 +1,5 @@
 import type { LineId, NetworkData } from "../data/types";
+import { getNetworkIndex } from "../data/networkIndex";
 import type { RoundConfig } from "./RunState";
 import { pickStartAndDestination } from "./seed";
 
@@ -36,7 +37,7 @@ export function createGameStateForRound(
   network: NetworkData,
   now: number,
 ): GameState {
-  const startStation = network.stations.find((station) => station.id === selection.startStationId);
+  const startStation = getNetworkIndex(network).stationById.get(selection.startStationId);
 
   if (!startStation || startStation.lines.length === 0) {
     throw new Error(`Seed selected invalid start station: ${selection.startStationId}`);

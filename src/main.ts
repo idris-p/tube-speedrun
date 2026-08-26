@@ -3,17 +3,27 @@ import { injectSpeedInsights } from '@vercel/speed-insights';
 import "./style.css";
 import { createConnectionId, networkData } from "./data/network";
 import { validateNetworkData } from "./data/validation";
-import { createGameStateForRound, getElapsedMilliseconds, type GameState } from "./game/GameState";
+import type { GameState } from "./game/GameState";
+import type { CountdownPhase } from "./game/AppPhase";
+import { AppController } from "./game/AppController";
 import {
   advanceCompletionCelebration,
   createCompletionCelebration,
   type CompletionCelebration,
 } from "./game/completionCelebration";
-import { generateRoundConfigs, generateSeed } from "./game/seed";
-import { ROUND_COUNT, type RoundStats, type RunResults, type RunState } from "./game/RunState";
+import { generateSeed } from "./game/seed";
+import { type RunState } from "./game/RunState";
+import {
+  COUNTDOWN_START_VALUE,
+  COUNTDOWN_STEP_MS,
+  getLinearAnimationProgress,
+  LINE_REVEAL_ANIMATION_DURATION_MS,
+  LINE_SWITCH_CAMERA_PAN_DURATION_MS,
+  REJECTED_MOVE_FLASH_MS,
+  TOUCH_MOVE_STUB_FEEDBACK_MS,
+} from "./game/timings";
 import {
   attemptTutorialMoveInDirection,
-  createTutorialGameState,
   getTutorialInstructions,
   TUTORIAL_CONNECTION_IDS,
 } from "./game/tutorial";
@@ -25,6 +35,7 @@ import {
   type MovementDirection,
 } from "./game/movement";
 import { bindKeyboardControls } from "./input/keyboard";
+import { bindMapPanZoom, type MapPanZoomBinding } from "./input/mapPanZoomController";
 import { getPinchGesture, type PinchGesture } from "./input/pinchZoom";
 import {
   getStubPathHitDistance,
@@ -45,7 +56,6 @@ import {
   type TouchGameplayGesture,
 } from "./input/touchGameplayGesture";
 import { MapRenderer } from "./rendering/mapRenderer";
-import { LINE_REVEAL_ANIMATION_SPEED } from "./rendering/lineRenderer";
 import { GRID_CELL_SIZE } from "./rendering/grid";
 import { STATION_WIPE_COMPONENT_RADIUS } from "./rendering/stationRenderer";
 import { Hud } from "./ui/hud";
@@ -53,13 +63,6 @@ import type { Point } from "./data/types";
 
 inject();
 injectSpeedInsights();
-
-const REJECTED_MOVE_FLASH_MS = 180;
-const TOUCH_MOVE_STUB_FEEDBACK_MS = 100;
-const COUNTDOWN_STEP_MS = 700;
-const COUNTDOWN_START_VALUE = 3;
-const LINE_SWITCH_CAMERA_PAN_SPEED = 1 / 160;
-const LINE_REVEAL_ANIMATION_DURATION_MS = 1 / LINE_REVEAL_ANIMATION_SPEED;
 
 // Start when the line head reaches the largest current-station marker radius on the shortest grid move,
 // then finish the wipe exactly as the line reveal reaches the station centre.
@@ -84,7 +87,7 @@ if (validationErrors.length > 0) {
 void boot();
 
 async function boot(): Promise<void> {
-  if (window.location.pathname === "/label-editor") {
+  if (window.location.pathname.split("/").filter(Boolean).at(-1) === "label-editor") {
     if (!isDevMode()) {
       appRoot.replaceChildren("Label editor is only available in development.");
       return;
@@ -98,13 +101,8 @@ async function boot(): Promise<void> {
 }
 
 function startGame(): void {
-let state: GameState | null = null;
-let runState: RunState | null = null;
-let results: RunResults | null = null;
-let mapViewerActive = false;
-let tutorialActive = false;
+const app = new AppController(networkData);
 let completionCelebration: CompletionCelebration | null = null;
-let countdown: { run: RunState; startedAt: number } | null = null;
 let moveSelection = createStubSelectionState();
 let selectedMoveStub: SVGGElement | null = null;
 let hoveredMoveStub: SVGGElement | null = null;
@@ -114,6 +112,7 @@ let lastPanPoint: Point | null = null;
 const mapTouchPoints = new Map<number, Point>();
 let mapPinchGesture: PinchGesture | null = null;
 let touchGameplayGesture: TouchGameplayGesture | null = null;
+let rejectedMoveTimeoutId: number | null = null;
 let touchMoveStubFeedback: {
   stub: SVGGElement;
   direction: MovementDirection;
@@ -140,11 +139,8 @@ let cameraPanAnimation: {
   to: Point;
   startedAt: number;
 } | null = null;
-let gameplayMapRenderer: MapRenderer;
-let gameplayMapPanPointerId: number | null = null;
-let gameplayMapLastPanPoint: Point | null = null;
-const gameplayMapTouchPoints = new Map<number, Point>();
-let gameplayMapPinchGesture: PinchGesture | null = null;
+let gameplayMapRenderer: MapRenderer | null = null;
+let gameplayMapPanZoom: MapPanZoomBinding | null = null;
 const touchGameplayControlsQuery = window.matchMedia("(hover: none) and (pointer: coarse)");
 
 const hud = new Hud(appRoot, networkData, {
@@ -152,42 +148,27 @@ const hud = new Hud(appRoot, networkData, {
   onStartSeed: (seed) => startRun(seed, "set"),
   onStartTutorial: () => startTutorial(),
   onOpenMap: () => {
-    state = null;
-    runState = null;
-    results = null;
-    countdown = null;
-    mapViewerActive = true;
-    tutorialActive = false;
+    app.showMap();
     resetRunTransientState();
     renderer.resetExplorerView();
     hud.showMapViewer();
     render();
   },
   onFocusMapStation: (stationId) => {
-    if (!mapViewerActive) {
+    if (app.phase.kind !== "map") {
       return;
     }
     renderer.focusExplorerStation(stationId);
     render();
   },
   onReturnToMenu: () => {
-    state = null;
-    runState = null;
-    results = null;
-    countdown = null;
-    mapViewerActive = false;
-    tutorialActive = false;
+    app.showMenu();
     resetRunTransientState();
     hud.showMenu();
     render();
   },
   onPlayAgain: () => {
-    state = null;
-    runState = null;
-    results = null;
-    countdown = null;
-    mapViewerActive = false;
-    tutorialActive = false;
+    app.showMenu();
     resetRunTransientState();
     hud.showSeedChoiceMenu();
     render();
@@ -208,27 +189,29 @@ const hud = new Hud(appRoot, networkData, {
     render();
   },
   onOpenGameplayMap: () => {
-    resetGameplayMapGesture();
-    gameplayMapRenderer.resetExplorerView();
-    gameplayMapRenderer.renderExplorer();
+    const map = getGameplayMapRenderer();
+    gameplayMapPanZoom?.reset();
+    map.resetExplorerView();
+    map.renderExplorer();
   },
   onFocusGameplayMapStation: (stationId) => {
-    gameplayMapRenderer.focusExplorerStation(stationId);
-    gameplayMapRenderer.renderExplorer();
+    const map = getGameplayMapRenderer();
+    map.focusExplorerStation(stationId);
+    map.renderExplorer();
   },
   onGameplayMapZoomIn: () => {
-    gameplayMapRenderer.zoomIn();
-    gameplayMapRenderer.renderExplorer();
+    const map = getGameplayMapRenderer();
+    map.zoomIn();
+    map.renderExplorer();
   },
   onGameplayMapZoomOut: () => {
-    gameplayMapRenderer.zoomOut();
-    gameplayMapRenderer.renderExplorer();
+    const map = getGameplayMapRenderer();
+    map.zoomOut();
+    map.renderExplorer();
   },
-  onCycleLine: (direction) => changeSelectedLine(direction),
 });
 
 const renderer = new MapRenderer(hud.mapHost, networkData);
-gameplayMapRenderer = new MapRenderer(hud.gameplayMapHost, networkData);
 let resizeRenderFrame: number | null = null;
 window.addEventListener("resize", () => {
   if (resizeRenderFrame !== null) {
@@ -237,190 +220,50 @@ window.addEventListener("resize", () => {
   resizeRenderFrame = window.requestAnimationFrame((now) => {
     resizeRenderFrame = null;
     render(now);
-    if (hud.isGameplayMapOpen()) {
+    if (hud.isGameplayMapOpen() && gameplayMapRenderer) {
       gameplayMapRenderer.renderExplorer();
     }
   });
 });
 
-gameplayMapRenderer.svg.addEventListener("wheel", (event) => {
-  event.preventDefault();
-  gameplayMapRenderer.zoomByWheel(event.deltaY, { x: event.clientX, y: event.clientY });
-  gameplayMapRenderer.renderExplorer();
-}, { passive: false });
-
-gameplayMapRenderer.svg.addEventListener("pointerdown", (event) => {
-  if (event.button !== 0) {
-    return;
-  }
-  if (event.pointerType === "touch") {
-    gameplayMapTouchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    gameplayMapRenderer.svg.setPointerCapture(event.pointerId);
-    if (gameplayMapTouchPoints.size >= 2) {
-      gameplayMapPinchGesture = getPinchGesture(gameplayMapTouchPoints);
-      gameplayMapPanPointerId = null;
-      gameplayMapLastPanPoint = null;
-    } else {
-      gameplayMapPanPointerId = event.pointerId;
-      gameplayMapLastPanPoint = { x: event.clientX, y: event.clientY };
-    }
-    gameplayMapRenderer.svg.classList.add("tube-map-panning");
-    event.preventDefault();
-    return;
-  }
-  gameplayMapPanPointerId = event.pointerId;
-  gameplayMapLastPanPoint = { x: event.clientX, y: event.clientY };
-  gameplayMapRenderer.svg.setPointerCapture(event.pointerId);
-  gameplayMapRenderer.svg.classList.add("tube-map-panning");
-  event.preventDefault();
-});
-
-gameplayMapRenderer.svg.addEventListener("pointermove", (event) => {
-  if (event.pointerType === "touch" && gameplayMapTouchPoints.has(event.pointerId)) {
-    gameplayMapTouchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (gameplayMapTouchPoints.size >= 2) {
-      const nextGesture = getPinchGesture(gameplayMapTouchPoints);
-      if (gameplayMapPinchGesture && nextGesture) {
-        gameplayMapRenderer.panByClientDelta(
-          nextGesture.midpoint.x - gameplayMapPinchGesture.midpoint.x,
-          nextGesture.midpoint.y - gameplayMapPinchGesture.midpoint.y,
-        );
-        gameplayMapRenderer.zoomByFactor(
-          nextGesture.distance / gameplayMapPinchGesture.distance,
-          nextGesture.midpoint,
-        );
-      }
-      gameplayMapPinchGesture = nextGesture;
-      gameplayMapRenderer.renderExplorer();
-      event.preventDefault();
-      return;
-    }
-  }
-  if (gameplayMapPanPointerId !== event.pointerId || !gameplayMapLastPanPoint) {
-    return;
-  }
-  gameplayMapRenderer.panByClientDelta(
-    event.clientX - gameplayMapLastPanPoint.x,
-    event.clientY - gameplayMapLastPanPoint.y,
-  );
-  gameplayMapLastPanPoint = { x: event.clientX, y: event.clientY };
-  gameplayMapRenderer.renderExplorer();
-  gameplayMapRenderer.svg.classList.add("tube-map-panning");
-});
-
-const endGameplayMapPan = (event: PointerEvent): void => {
-  if (event.pointerType === "touch" && gameplayMapTouchPoints.delete(event.pointerId)) {
-    if (gameplayMapRenderer.svg.hasPointerCapture(event.pointerId)) {
-      gameplayMapRenderer.svg.releasePointerCapture(event.pointerId);
-    }
-    const remainingTouch = gameplayMapTouchPoints.entries().next().value as [number, Point] | undefined;
-    gameplayMapPinchGesture = null;
-    if (remainingTouch) {
-      gameplayMapPanPointerId = remainingTouch[0];
-      gameplayMapLastPanPoint = remainingTouch[1];
-    } else {
-      gameplayMapPanPointerId = null;
-      gameplayMapLastPanPoint = null;
-      gameplayMapRenderer.svg.classList.remove("tube-map-panning");
-    }
-    return;
-  }
-  if (gameplayMapPanPointerId !== event.pointerId) {
-    return;
-  }
-  if (gameplayMapRenderer.svg.hasPointerCapture(event.pointerId)) {
-    gameplayMapRenderer.svg.releasePointerCapture(event.pointerId);
-  }
-  gameplayMapPanPointerId = null;
-  gameplayMapLastPanPoint = null;
-  gameplayMapRenderer.svg.classList.remove("tube-map-panning");
-};
-gameplayMapRenderer.svg.addEventListener("pointerup", endGameplayMapPan);
-gameplayMapRenderer.svg.addEventListener("pointercancel", endGameplayMapPan);
-
-function resetGameplayMapGesture(): void {
-  for (const pointerId of gameplayMapTouchPoints.keys()) {
-    if (gameplayMapRenderer.svg.hasPointerCapture(pointerId)) {
-      gameplayMapRenderer.svg.releasePointerCapture(pointerId);
-    }
-  }
-  gameplayMapTouchPoints.clear();
-  gameplayMapPinchGesture = null;
-  gameplayMapPanPointerId = null;
-  gameplayMapLastPanPoint = null;
-  gameplayMapRenderer.svg.classList.remove("tube-map-panning");
+function getGameplayMapRenderer(): MapRenderer {
+  if (gameplayMapRenderer) return gameplayMapRenderer;
+  gameplayMapRenderer = new MapRenderer(hud.gameplayMapHost, networkData);
+  gameplayMapPanZoom = bindMapPanZoom(gameplayMapRenderer, () => gameplayMapRenderer?.renderExplorer());
+  return gameplayMapRenderer;
 }
 
 function startRun(seed: string, seedSource: RunState["seedSource"]): void {
-  mapViewerActive = false;
-  tutorialActive = false;
-  runState = {
-    seed,
-    seedSource,
-    rounds: generateRoundConfigs(seed, networkData),
-    currentRoundIndex: 0,
-    completedRoundStats: [],
-  };
-  results = null;
-  state = null;
-  countdown = { run: runState, startedAt: performance.now() };
+  app.startRun(seed, seedSource, performance.now());
   resetRunTransientState();
   render();
 }
 
 function startTutorial(): void {
-  mapViewerActive = false;
-  tutorialActive = true;
-  runState = null;
-  results = null;
-  countdown = null;
-  state = createTutorialGameState(networkData, performance.now());
+  app.startTutorial(performance.now());
   resetRunTransientState();
   render();
 }
 
-function completeCountdown(activeRun: RunState, now: number): void {
-  countdown = null;
-  runState = activeRun;
-  state = createGameStateForRound(
-    activeRun.seed,
-    activeRun.rounds[activeRun.currentRoundIndex],
-    networkData,
-    now,
-  );
+function completeCountdown(now: number): void {
+  if (!app.completeCountdown(now)) return;
   resetRunTransientState();
   render(now);
 }
 
 function advanceFromCompletedRound(): void {
-  if (!state?.completed || !runState) {
+  const gameplay = app.gameplay;
+  if (!gameplay?.state.completed || !gameplay.run) {
     return;
   }
 
-  const stats = getCurrentRoundStats(state);
-  const completedRoundStats = upsertRoundStats(runState.completedRoundStats, stats);
-  if (runState.currentRoundIndex >= ROUND_COUNT - 1) {
-    results = {
-      seed: runState.seed,
-      seedSource: runState.seedSource,
-      rounds: runState.rounds,
-      roundStats: completedRoundStats,
-    };
-    state = null;
-    runState = null;
-    countdown = null;
+  const nextPhase = app.advanceCompletedRound(performance.now());
+  if (nextPhase.kind === "results") {
     resetRunTransientState();
     render();
     return;
   }
 
-  runState = {
-    ...runState,
-    currentRoundIndex: runState.currentRoundIndex + 1,
-    completedRoundStats,
-  };
-  state = null;
-  countdown = { run: runState, startedAt: performance.now() };
   resetRunTransientState();
   render();
 }
@@ -433,6 +276,10 @@ function resetRunTransientState(): void {
   stationWipeAnimation = null;
   cameraPanAnimation = null;
   completionCelebration = null;
+  if (rejectedMoveTimeoutId !== null) {
+    window.clearTimeout(rejectedMoveTimeoutId);
+    rejectedMoveTimeoutId = null;
+  }
   panPointerId = null;
   lastPanPoint = null;
   renderer.svg.classList.remove("tube-map-panning");
@@ -440,52 +287,60 @@ function resetRunTransientState(): void {
 }
 
 function render(now = performance.now()): void {
-  if (mapViewerActive) {
-    renderer.renderExplorer();
-  } else if (results) {
-    renderer.renderMenuPreview(now);
-    hud.showResults(results);
-  } else if (state) {
-    renderer.render(
-      state,
-      getActiveLineRevealAnimation(now),
-      getActiveStationWipeAnimation(now),
-      getActiveCameraPanAnimation(now),
-      completionCelebration !== null,
-      completionCelebration !== null && completionCelebration.startedAt !== null,
-      !touchGameplayControlsQuery.matches,
-      tutorialActive ? TUTORIAL_CONNECTION_IDS : null,
-    );
-    refreshHoveredMoveStub();
-    hud.update(
-      state,
-      now,
-      runState,
-      completionCelebration === null,
-      tutorialActive
-        ? getTutorialInstructions(state, touchGameplayControlsQuery.matches)
-        : null,
-    );
-  } else if (countdown) {
-    renderer.renderMenuPreview(now);
-    hud.showCountdown(getCountdownValue(countdown, now));
-  } else {
-    renderer.renderMenuPreview(now);
-    hud.update(null, now);
+  const phase = app.phase;
+  switch (phase.kind) {
+    case "map":
+      renderer.renderExplorer();
+      break;
+    case "results":
+      renderer.renderMenuPreview(now);
+      hud.showResults(phase.results);
+      break;
+    case "gameplay":
+      renderer.render(
+        phase.state,
+        getActiveLineRevealAnimation(now),
+        getActiveStationWipeAnimation(now),
+        getActiveCameraPanAnimation(now),
+        completionCelebration !== null,
+        completionCelebration !== null && completionCelebration.startedAt !== null,
+        !touchGameplayControlsQuery.matches,
+        phase.tutorial ? TUTORIAL_CONNECTION_IDS : null,
+      );
+      refreshHoveredMoveStub();
+      hud.update(
+        phase.state,
+        now,
+        phase.run,
+        completionCelebration === null,
+        phase.tutorial
+          ? getTutorialInstructions(phase.state, touchGameplayControlsQuery.matches)
+          : null,
+      );
+      break;
+    case "countdown":
+      renderer.renderMenuPreview(now);
+      hud.showCountdown(getCountdownValue(phase, now));
+      break;
+    case "menu":
+      renderer.renderMenuPreview(now);
+      hud.update(null, now);
+      break;
   }
 }
 
 function tick(): void {
   const now = performance.now();
-  if (mapViewerActive) {
+  const phase = app.phase;
+  if (phase.kind === "map") {
     // The explorer is static until the player pans, zooms, searches, or resizes it.
-  } else if (countdown) {
-    if (now - countdown.startedAt >= COUNTDOWN_STEP_MS * COUNTDOWN_START_VALUE) {
-      completeCountdown(countdown.run, now);
+  } else if (phase.kind === "countdown") {
+    if (now - phase.startedAt >= COUNTDOWN_STEP_MS * COUNTDOWN_START_VALUE) {
+      completeCountdown(now);
     } else {
       render(now);
     }
-  } else if (state) {
+  } else if (phase.kind === "gameplay") {
     const hadLineRevealAnimation = lineRevealAnimation !== null;
     const hadStationWipeAnimation = stationWipeAnimation !== null;
     const hadCameraPanAnimation = cameraPanAnimation !== null;
@@ -526,47 +381,17 @@ function tick(): void {
     ) {
       render(now);
     } else {
-      hud.update(
-        state,
-        now,
-        runState,
-        completionCelebration === null,
-        tutorialActive
-          ? getTutorialInstructions(state, touchGameplayControlsQuery.matches)
-          : null,
-      );
+      hud.updateTimer(phase.state, now);
     }
-  } else if (results || !state) {
+  } else {
     renderer.renderMenuPreview(now);
   }
   requestAnimationFrame(tick);
 }
 
-function getCountdownValue(activeCountdown: NonNullable<typeof countdown>, now: number): number {
+function getCountdownValue(activeCountdown: CountdownPhase, now: number): number {
   const elapsedSteps = Math.floor((now - activeCountdown.startedAt) / COUNTDOWN_STEP_MS);
   return Math.max(1, COUNTDOWN_START_VALUE - elapsedSteps);
-}
-
-function getCurrentRoundStats(completedState: GameState): RoundStats {
-  if (!runState) {
-    throw new Error("Cannot collect round stats without a run state.");
-  }
-
-  return {
-    roundNumber: runState.currentRoundIndex + 1,
-    timeMs: getElapsedMilliseconds(completedState, completedState.endTime ?? performance.now()),
-    moves: completedState.moveCount,
-    lineChanges: completedState.changeCount,
-  };
-}
-
-function upsertRoundStats(stats: RoundStats[], next: RoundStats): RoundStats[] {
-  const existingIndex = stats.findIndex((candidate) => candidate.roundNumber === next.roundNumber);
-  if (existingIndex < 0) {
-    return [...stats, next];
-  }
-
-  return stats.map((candidate, index) => index === existingIndex ? next : candidate);
 }
 
 function getActiveLineRevealAnimation(now: number) {
@@ -588,7 +413,11 @@ function getLineRevealAnimationProgress(now: number): number {
     return 1;
   }
 
-  return Math.max(0, Math.min(1, (now - lineRevealAnimation.startedAt) * LINE_REVEAL_ANIMATION_SPEED));
+  return getLinearAnimationProgress(
+    lineRevealAnimation.startedAt,
+    now,
+    LINE_REVEAL_ANIMATION_DURATION_MS,
+  );
 }
 
 function getActiveStationWipeAnimation(now: number) {
@@ -628,19 +457,25 @@ function getCameraPanAnimationProgress(now: number): number {
     return 1;
   }
 
-  return Math.max(0, Math.min(1, (now - cameraPanAnimation.startedAt) * LINE_SWITCH_CAMERA_PAN_SPEED));
+  return getLinearAnimationProgress(
+    cameraPanAnimation.startedAt,
+    now,
+    LINE_SWITCH_CAMERA_PAN_DURATION_MS,
+  );
 }
 
 function changeSelectedLine(direction: -1 | 1): void {
-  if (!state || hud.isGameplayOverlayOpen()) {
+  const gameplay = app.gameplay;
+  if (!gameplay || hud.isGameplayOverlayOpen()) {
     return;
   }
 
   cancelTouchMoveStubFeedback();
   cancelMovePointerSelection();
-  const previousState = state;
-  state = cycleSelectedLine(state, networkData, direction);
-  const pan = renderer.getLineSwitchCameraPan(previousState, state);
+  const previousState = gameplay.state;
+  const nextState = cycleSelectedLine(gameplay.state, networkData, direction);
+  app.setGameplayState(nextState);
+  const pan = renderer.getLineSwitchCameraPan(previousState, nextState);
   if (!lineRevealAnimation && pan) {
     cameraPanAnimation = { ...pan, startedAt: performance.now() };
   } else {
@@ -649,7 +484,7 @@ function changeSelectedLine(direction: -1 | 1): void {
   render();
 }
 
-bindKeyboardControls(changeSelectedLine);
+const disposeKeyboardControls = bindKeyboardControls(changeSelectedLine);
 
 renderer.svg.addEventListener("pointermove", (event) => {
   rememberMousePoint(event);
@@ -716,18 +551,19 @@ renderer.svg.addEventListener("pointerleave", () => {
 });
 
 function attemptMoveFromStub(direction: MovementDirection, now: number): boolean {
-  if (!canSelectMovementStub() || !state) {
+  const gameplay = app.gameplay;
+  if (!canSelectMovementStub() || !gameplay) {
     return false;
   }
 
-  const previousState = state;
-  const fromStationId = state.currentStationId;
-  const selectedLineId = state.selectedLineId;
-  const revealedConnectionsBeforeMove = state.revealedConnections;
-  const result = tutorialActive
-    ? attemptTutorialMoveInDirection(state, networkData, direction, now)
-    : attemptMoveInDirection(state, networkData, direction, now);
-  state = result.state;
+  const previousState = gameplay.state;
+  const fromStationId = gameplay.state.currentStationId;
+  const selectedLineId = gameplay.state.selectedLineId;
+  const revealedConnectionsBeforeMove = gameplay.state.revealedConnections;
+  const result = gameplay.tutorial
+    ? attemptTutorialMoveInDirection(gameplay.state, networkData, direction, now)
+    : attemptMoveInDirection(gameplay.state, networkData, direction, now);
+  app.setGameplayState(result.state);
 
   if (result.moved && result.targetStationId) {
     const connectionId = createConnectionId(selectedLineId, fromStationId, result.targetStationId);
@@ -747,18 +583,21 @@ function attemptMoveFromStub(direction: MovementDirection, now: number): boolean
     };
   }
 
-  if (state.completed) {
+  if (result.state.completed) {
     completionCelebration = createCompletionCelebration();
   }
 
-  if (!result.moved && state.rejectedMoveAt !== null) {
-    const rejectedMoveAt = state.rejectedMoveAt;
-    window.setTimeout(() => {
-      if (!state || state.rejectedMoveAt !== rejectedMoveAt) {
+  if (!result.moved && result.state.rejectedMoveAt !== null) {
+    const rejectedMoveAt = result.state.rejectedMoveAt;
+    if (rejectedMoveTimeoutId !== null) window.clearTimeout(rejectedMoveTimeoutId);
+    rejectedMoveTimeoutId = window.setTimeout(() => {
+      rejectedMoveTimeoutId = null;
+      const activeGameplay = app.gameplay;
+      if (!activeGameplay || activeGameplay.state.rejectedMoveAt !== rejectedMoveAt) {
         return;
       }
 
-      state = { ...state, rejectedMoveAt: null };
+      app.setGameplayState({ ...activeGameplay.state, rejectedMoveAt: null });
       render();
     }, REJECTED_MOVE_FLASH_MS);
   }
@@ -813,8 +652,8 @@ function getDirectionStubControlAtPoint(clientX: number, clientY: number): SVGGE
 }
 
 function canSelectMovementStub(): boolean {
-  return !mapViewerActive &&
-    Boolean(state && !state.completed) &&
+  const gameplay = app.gameplay;
+  return Boolean(gameplay && !gameplay.state.completed) &&
     !hud.isGameplayOverlayOpen() &&
     touchMoveStubFeedback === null &&
     lineRevealAnimation === null &&
@@ -985,20 +824,22 @@ renderer.svg.addEventListener("pointerdown", (event) => {
 });
 
 function canPanAndZoom(): boolean {
+  const gameplay = app.gameplay;
   return !hud.isGameplayOverlayOpen() &&
-    (mapViewerActive || Boolean(state?.completed && completionCelebration === null));
+    (app.phase.kind === "map" || Boolean(gameplay?.state.completed && completionCelebration === null));
 }
 
 function canUseTouchGameplayControls(): boolean {
+  const gameplay = app.gameplay;
   return touchGameplayControlsQuery.matches &&
-    !mapViewerActive &&
-    Boolean(state && !state.completed) &&
+    Boolean(gameplay && !gameplay.state.completed) &&
     !hud.isGameplayOverlayOpen() &&
     touchMoveStubFeedback === null;
 }
 
 function canCycleLineWithTouch(): boolean {
-  const lineCount = state ? getLineCyclePreview(state, networkData)?.lineCount ?? 0 : 0;
+  const gameplay = app.gameplay;
+  const lineCount = gameplay ? getLineCyclePreview(gameplay.state, networkData)?.lineCount ?? 0 : 0;
   return lineCount > 1;
 }
 
@@ -1047,14 +888,15 @@ function resetTouchGameplayGesture(): void {
 }
 
 function showTouchMoveStubFeedback(direction: MovementDirection): boolean {
-  if (!state || !canSelectMovementStub()) {
+  const gameplay = app.gameplay;
+  if (!gameplay || !canSelectMovementStub()) {
     return false;
   }
 
   const target = findDirectionalNeighbour(
     networkData,
-    state.currentStationId,
-    state.selectedLineId,
+    gameplay.state.currentStationId,
+    gameplay.state.selectedLineId,
     direction,
   );
   if (!target) {
@@ -1071,8 +913,8 @@ function showTouchMoveStubFeedback(direction: MovementDirection): boolean {
     return false;
   }
 
-  const stationId = state.currentStationId;
-  const lineId = state.selectedLineId;
+  const stationId = gameplay.state.currentStationId;
+  const lineId = gameplay.state.selectedLineId;
   stub.classList.add("direction-stub-touch-feedback");
   const timeoutId = window.setTimeout(() => {
     const feedback = touchMoveStubFeedback;
@@ -1082,9 +924,10 @@ function showTouchMoveStubFeedback(direction: MovementDirection): boolean {
 
     feedback.stub.classList.remove("direction-stub-touch-feedback");
     touchMoveStubFeedback = null;
+    const activeGameplay = app.gameplay;
     if (
-      state?.currentStationId !== feedback.stationId ||
-      state.selectedLineId !== feedback.lineId
+      activeGameplay?.state.currentStationId !== feedback.stationId ||
+      activeGameplay.state.selectedLineId !== feedback.lineId
     ) {
       return;
     }
@@ -1179,6 +1022,12 @@ renderer.svg.addEventListener("pointercancel", (event) => {
   endMovePointer(event, false);
   endPan(event);
 });
+renderer.svg.addEventListener("lostpointercapture", (event) => {
+  if (endTouchGameplayPointer(event, false)) return;
+  endMapTouchPointer(event);
+  endMovePointer(event, false);
+  endPan(event);
+});
 
 renderer.svg.addEventListener("keydown", (event) => {
   if (event.key !== "Enter" && event.key !== " ") {
@@ -1196,6 +1045,32 @@ renderer.svg.addEventListener("keydown", (event) => {
 
 render();
 requestAnimationFrame(tick);
+
+const handleTouchControlModeChange = (): void => {
+  cancelMovePointerSelection();
+  resetTouchGameplayGesture();
+  render();
+};
+if (typeof touchGameplayControlsQuery.addEventListener === "function") {
+  touchGameplayControlsQuery.addEventListener("change", handleTouchControlModeChange);
+} else {
+  const legacyQuery = touchGameplayControlsQuery as MediaQueryList & {
+    addListener: (listener: (event: MediaQueryListEvent) => void) => void;
+  };
+  legacyQuery.addListener(handleTouchControlModeChange);
+}
+window.addEventListener("pagehide", () => {
+  disposeKeyboardControls();
+  gameplayMapPanZoom?.dispose();
+  if (typeof touchGameplayControlsQuery.removeEventListener === "function") {
+    touchGameplayControlsQuery.removeEventListener("change", handleTouchControlModeChange);
+  } else {
+    const legacyQuery = touchGameplayControlsQuery as MediaQueryList & {
+      removeListener: (listener: (event: MediaQueryListEvent) => void) => void;
+    };
+    legacyQuery.removeListener(handleTouchControlModeChange);
+  }
+}, { once: true });
 
 function isStationVisible(
   stationId: string,

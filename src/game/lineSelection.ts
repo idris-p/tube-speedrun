@@ -1,4 +1,5 @@
 import type { LineId, NetworkData } from "../data/types";
+import { getNetworkIndex } from "../data/networkIndex";
 import type { GameState } from "./GameState";
 
 export type LineCyclePreview = {
@@ -13,7 +14,7 @@ export function cycleSelectedLine(state: GameState, network: NetworkData, offset
     return state;
   }
 
-  const station = network.stations.find((candidate) => candidate.id === state.currentStationId);
+  const station = getNetworkIndex(network).stationById.get(state.currentStationId);
   if (!station || station.lines.length === 0) {
     return state;
   }
@@ -28,7 +29,7 @@ export function cycleSelectedLine(state: GameState, network: NetworkData, offset
 }
 
 export function getLineCyclePreview(state: GameState, network: NetworkData): LineCyclePreview | null {
-  const station = network.stations.find((candidate) => candidate.id === state.currentStationId);
+  const station = getNetworkIndex(network).stationById.get(state.currentStationId);
   if (!station || station.lines.length === 0) {
     return null;
   }

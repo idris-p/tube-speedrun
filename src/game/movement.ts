@@ -1,5 +1,6 @@
 import { createConnectionId } from "../data/network";
-import type { Connection, GridPoint, NetworkData, Point, Station } from "../data/types";
+import { getNetworkIndex } from "../data/networkIndex";
+import type { Connection, GridPoint, LineId, NetworkData, Point, Station } from "../data/types";
 import type { GameState } from "./GameState";
 import { isCountedLineChange } from "./journey";
 
@@ -43,35 +44,16 @@ export type MoveResult = {
 };
 
 export function getStation(network: NetworkData, stationId: string): Station {
-  const station = network.stations.find((candidate) => candidate.id === stationId);
+  const station = getNetworkIndex(network).stationById.get(stationId);
   if (!station) {
     throw new Error(`Unknown station: ${stationId}`);
   }
   return station;
 }
 
-export function getConnectionBetween(network: NetworkData, from: string, to: string, line = ""): Connection | undefined {
-  return network.connections.find(
-    (connection) =>
-      (line === "" || connection.line === line) &&
-      ((connection.from === from && connection.to === to) || (connection.from === to && connection.to === from)),
-  );
-}
-
-export function getLineConnections(network: NetworkData, stationId: string, line: string): Connection[] {
-  return network.connections.filter(
-    (connection) =>
-      connection.line === line &&
-      (connection.from === stationId || (!connection.oneWay && connection.to === stationId)),
-  );
-}
-
-export function getLineNeighbours(network: NetworkData, stationId: string, line: string): Station[] {
-  const neighbourIds = getLineConnections(network, stationId, line).map((connection) =>
-    connection.from === stationId ? connection.to : connection.from,
-  );
-
-  return neighbourIds.map((id) => getStation(network, id));
+export function getLineConnections(network: NetworkData, stationId: string, line: LineId): Connection[] {
+  return (getNetworkIndex(network).outgoingConnectionsByStation.get(stationId) ?? [])
+    .filter((connection) => connection.line === line);
 }
 
 export function angleBetweenPoints(from: Point, to: Point): number {
@@ -81,11 +63,6 @@ export function angleBetweenPoints(from: Point, to: Point): number {
 
 export function normalizeAngle(angle: number): number {
   return ((angle % 360) + 360) % 360;
-}
-
-export function angleDifferenceDegrees(a: number, b: number): number {
-  const difference = Math.abs(normalizeAngle(a) - normalizeAngle(b));
-  return Math.min(difference, 360 - difference);
 }
 
 export function snapAngleToDirection(angle: number): MovementDirection {
@@ -175,7 +152,7 @@ export function getConnectionFirstStepDirection(connection: Connection, stationI
 export function findDirectionalNeighbour(
   network: NetworkData,
   stationId: string,
-  line: string,
+  line: LineId,
   intendedDirection: MovementDirection,
 ): Station | null {
   for (const connection of getLineConnections(network, stationId, line)) {

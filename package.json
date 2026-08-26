@@ -10,7 +10,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "generate:network": "node scripts/generate-network.mjs",
-    "audit:network": "node scripts/audit-network.mjs",
+    "audit:network": "npm run audit:generated && npm run audit:runtime",
+    "audit:generated": "node scripts/audit-network.mjs",
+    "audit:runtime": "node --import ./scripts/register-ts-loader.mjs scripts/audit-network.mjs --runtime",
     "preview:network": "node --import ./scripts/register-ts-loader.mjs scripts/render-network-preview.mjs"
   },
   "devDependencies": {

@@ -140,6 +140,7 @@ const schematicStationPositionOverrides = new Map<string, Pick<Station, "x" | "y
   ["kew-gardens", { x: -31, y: 26 }],
   ["richmond", { x: -37, y: 32 }],
   ["kensington-olympia", { x: 10, y: 5 }],
+  ["west-kensington", { x: 8, y: 14 }],
   ["west-brompton", { x: 10, y: 21 }],
   ["fulham-broadway", { x: 10, y: 26 }],
   ["parsons-green", { x: 10, y: 30 }],
@@ -190,6 +191,14 @@ const stations: Station[] = stationSeeds
   }));
 
 const schematicPathOverrides = new Map<string, Connection["path"]>([
+  [
+    createConnectionId("district", "barons-court", "west-kensington"),
+    expandSchematicPath([{ x: 4, y: 14 }, { x: 8, y: 14 }]),
+  ],
+  [
+    createConnectionId("district", "earl-s-court", "west-kensington"),
+    expandSchematicPath([{ x: 14, y: 14 }, { x: 8, y: 14 }]),
+  ],
   [
     createConnectionId("central", "hanger-lane", "perivale"),
     expandSchematicPath([{ x: -35, y: -21 }, { x: -42, y: -28 }]),

@@ -80,6 +80,7 @@ export class LabelEditor {
   private readonly stepSelect: HTMLSelectElement;
   private readonly baseViewBox: ViewBox;
   private readonly resizeObserver: ResizeObserver;
+  private collisionFrame: number | null = null;
 
   private viewBox: ViewBox;
   private selectedStationId: string | null = null;
@@ -269,8 +270,15 @@ export class LabelEditor {
     this.renderLabels();
     this.updateSelectedStatus();
     this.output.value = this.createExportSource();
+    if (this.collisionFrame !== null) {
+      window.cancelAnimationFrame(this.collisionFrame);
+      this.collisionFrame = null;
+    }
     if (this.showCollisionsInput.checked) {
-      window.requestAnimationFrame(() => this.markCollisions());
+      this.collisionFrame = window.requestAnimationFrame(() => {
+        this.collisionFrame = null;
+        this.markCollisions();
+      });
     }
   }
 

@@ -19,13 +19,26 @@ export function createHudMetric(label: string, valueElement: HTMLSpanElement): H
 
 export function renderTimeValue(element: HTMLElement, parts: TimeValueParts): void {
   element.classList.add("time-value");
-  element.replaceChildren(
-    timePart(parts.minutes, "time-minutes"),
-    timePart(":", "time-separator"),
-    timePart(parts.seconds, "time-seconds"),
-    timePart(".", "time-separator"),
-    timePart(parts.fraction, "time-centiseconds"),
-  );
+  let minutes = element.querySelector<HTMLSpanElement>(".time-minutes");
+  let seconds = element.querySelector<HTMLSpanElement>(".time-seconds");
+  let fraction = element.querySelector<HTMLSpanElement>(".time-centiseconds");
+  if (!minutes || !seconds || !fraction || element.children.length !== 5) {
+    minutes = timePart(parts.minutes, "time-minutes");
+    seconds = timePart(parts.seconds, "time-seconds");
+    fraction = timePart(parts.fraction, "time-centiseconds");
+    element.replaceChildren(
+      minutes,
+      timePart(":", "time-separator"),
+      seconds,
+      timePart(".", "time-separator"),
+      fraction,
+    );
+    return;
+  }
+
+  setText(minutes, parts.minutes);
+  setText(seconds, parts.seconds);
+  setText(fraction, parts.fraction);
 }
 
 function timePart(text: string, className: string): HTMLSpanElement {
@@ -33,4 +46,10 @@ function timePart(text: string, className: string): HTMLSpanElement {
   element.className = className;
   element.textContent = text;
   return element;
+}
+
+function setText(element: HTMLElement, value: string): void {
+  if (element.textContent !== value) {
+    element.textContent = value;
+  }
 }
